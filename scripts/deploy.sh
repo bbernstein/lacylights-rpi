@@ -279,7 +279,7 @@ if [ "$SKIP_REBUILD" = false ]; then
     if [ "$DEPLOY_BACKEND" = true ]; then
         BUILD_COMMANDS+="echo '[INFO] Rebuilding backend...'
 cd $BACKEND_REMOTE
-npm install --production
+npm install
 npm run build
 "
     fi
@@ -287,7 +287,7 @@ npm run build
     if [ "$DEPLOY_FRONTEND" = true ]; then
         BUILD_COMMANDS+="echo '[INFO] Rebuilding frontend...'
 cd $FRONTEND_REMOTE
-npm install --production
+npm install
 npm run build
 "
     fi
@@ -295,7 +295,7 @@ npm run build
     if [ "$DEPLOY_MCP" = true ]; then
         BUILD_COMMANDS+="echo '[INFO] Rebuilding MCP server...'
 cd $MCP_REMOTE
-npm install --production
+npm install
 npm run build
 "
     fi
