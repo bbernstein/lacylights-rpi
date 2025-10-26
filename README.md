@@ -27,10 +27,19 @@ git clone https://github.com/bbernstein/lacylights-rpi.git
 cd lacylights-rpi
 
 # Run complete setup (takes 15-20 minutes)
+# This clones the latest code from GitHub
 ./scripts/setup-new-pi.sh pi@raspberrypi.local
+
+# Or specify specific versions:
+./scripts/setup-new-pi.sh pi@raspberrypi.local \
+    --backend-version v1.1.0 \
+    --frontend-version v0.2.0 \
+    --mcp-version v1.0.0
 ```
 
 Then access your LacyLights at: **http://lacylights.local**
+
+**Note:** The setup script clones repositories directly from GitHub to the Pi, so you don't need to have them cloned locally.
 
 ### Deploying Updates
 
@@ -103,19 +112,22 @@ Complete guides in `docs/`:
 - macOS, Linux, or Windows with WSL
 - Git
 - SSH client
-- All LacyLights repositories cloned:
+- This repository cloned: [lacylights-rpi](https://github.com/bbernstein/lacylights-rpi)
+
+**For fresh installation:** Repositories are cloned directly from GitHub to the Pi during setup.
+
+**For development workflow:** Clone the application repositories locally:
   - [lacylights-node](https://github.com/bbernstein/lacylights-node) (backend)
   - [lacylights-fe](https://github.com/bbernstein/lacylights-fe) (frontend)
   - [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) (MCP server)
-  - [lacylights-rpi](https://github.com/bbernstein/lacylights-rpi) (this repo)
 
-**Directory structure:**
+**Recommended directory structure for development:**
 ```
 ~/src/lacylights/
-├── lacylights-node/    # Backend repository
-├── lacylights-fe/      # Frontend repository
-├── lacylights-mcp/     # MCP server repository
-└── lacylights-rpi/     # This repository
+├── lacylights-node/    # Backend repository (for development)
+├── lacylights-fe/      # Frontend repository (for development)
+├── lacylights-mcp/     # MCP server repository (for development)
+└── lacylights-rpi/     # This repository (deployment tools)
 ```
 
 ## Repository Structure

@@ -36,27 +36,75 @@ print_header() {
     echo -e "${CYAN}========================================${NC}"
 }
 
+# Parse command line arguments
+PI_HOST=""
+BACKEND_VERSION="main"
+FRONTEND_VERSION="main"
+MCP_VERSION="main"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --backend-version)
+            BACKEND_VERSION="$2"
+            shift 2
+            ;;
+        --frontend-version)
+            FRONTEND_VERSION="$2"
+            shift 2
+            ;;
+        --mcp-version)
+            MCP_VERSION="$2"
+            shift 2
+            ;;
+        --help)
+            echo "LacyLights Complete Setup Script"
+            echo ""
+            echo "Usage: $0 <pi-host> [options]"
+            echo ""
+            echo "Arguments:"
+            echo "  <pi-host>              SSH connection string (e.g., pi@lacylights.local)"
+            echo ""
+            echo "Options:"
+            echo "  --backend-version TAG   Git tag/branch for backend (default: main)"
+            echo "  --frontend-version TAG  Git tag/branch for frontend (default: main)"
+            echo "  --mcp-version TAG       Git tag/branch for MCP server (default: main)"
+            echo "  --help                  Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0 pi@lacylights.local"
+            echo "  $0 pi@lacylights.local --backend-version v1.1.0 --frontend-version v0.2.0"
+            exit 0
+            ;;
+        *)
+            if [ -z "$PI_HOST" ]; then
+                PI_HOST="$1"
+            else
+                print_error "Unknown option: $1"
+                print_error "Use --help for usage information"
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
 # Check if PI_HOST is provided
-if [ -z "$1" ]; then
-    print_error "Usage: $0 <pi-host>"
+if [ -z "$PI_HOST" ]; then
+    print_error "Usage: $0 <pi-host> [options]"
     print_error "Example: $0 pi@lacylights.local"
+    print_error "Use --help for more options"
     exit 1
 fi
 
-PI_HOST="$1"
-
 print_header "LacyLights Complete Setup"
 print_info "Target: $PI_HOST"
+print_info "Backend version: $BACKEND_VERSION"
+print_info "Frontend version: $FRONTEND_VERSION"
+print_info "MCP version: $MCP_VERSION"
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
-
-# Check if lacylights-rpi repo exists
-if [ ! -d "$REPO_DIR" ]; then
-    print_error "lacylights-rpi repository not found at $REPO_DIR"
-    exit 1
-fi
 
 # Check if we can reach the Pi
 print_info "Checking if Raspberry Pi is reachable..."
@@ -124,74 +172,61 @@ ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 04-permissions-setup
 
 print_success "Permissions setup complete"
 
-# Clone repositories
-print_header "Step 6: Cloning Repositories"
-print_info "Cloning LacyLights repositories..."
+# Clone repositories from GitHub
+print_header "Step 6: Cloning Repositories from GitHub"
+print_info "Cloning LacyLights repositories from GitHub..."
 
-# Check if repos exist in parent directory
-PARENT_DIR="$(dirname "$REPO_DIR")"
+ssh "$PI_HOST" << EOF
+set -e
 
-if [ ! -d "$PARENT_DIR/lacylights-node" ]; then
-    print_error "lacylights-node repository not found at $PARENT_DIR/lacylights-node"
-    print_error "Please clone all repositories first"
-    exit 1
+# Clone backend
+echo "[INFO] Cloning backend (lacylights-node) version $BACKEND_VERSION..."
+if [ -d /opt/lacylights/backend/.git ]; then
+    echo "[INFO] Backend repository exists, updating..."
+    cd /opt/lacylights/backend
+    git fetch origin
+    git checkout $BACKEND_VERSION
+    git pull origin $BACKEND_VERSION 2>/dev/null || true
+else
+    git clone --depth 1 --branch $BACKEND_VERSION \
+        https://github.com/bbernstein/lacylights-node.git \
+        /opt/lacylights/backend
 fi
+echo "[SUCCESS] Backend repository ready"
 
-if [ ! -d "$PARENT_DIR/lacylights-fe" ]; then
-    print_error "lacylights-fe repository not found at $PARENT_DIR/lacylights-fe"
-    print_error "Please clone all repositories first"
-    exit 1
+# Clone frontend
+echo "[INFO] Cloning frontend (lacylights-fe) version $FRONTEND_VERSION..."
+if [ -d /opt/lacylights/frontend-src/.git ]; then
+    echo "[INFO] Frontend repository exists, updating..."
+    cd /opt/lacylights/frontend-src
+    git fetch origin
+    git checkout $FRONTEND_VERSION
+    git pull origin $FRONTEND_VERSION 2>/dev/null || true
+else
+    git clone --depth 1 --branch $FRONTEND_VERSION \
+        https://github.com/bbernstein/lacylights-fe.git \
+        /opt/lacylights/frontend-src
 fi
+echo "[SUCCESS] Frontend repository ready"
 
-if [ ! -d "$PARENT_DIR/lacylights-mcp" ]; then
-    print_warning "lacylights-mcp repository not found at $PARENT_DIR/lacylights-mcp"
-    print_info "Continuing without MCP server..."
+# Clone MCP server
+echo "[INFO] Cloning MCP server (lacylights-mcp) version $MCP_VERSION..."
+if [ -d /opt/lacylights/mcp/.git ]; then
+    echo "[INFO] MCP repository exists, updating..."
+    cd /opt/lacylights/mcp
+    git fetch origin
+    git checkout $MCP_VERSION
+    git pull origin $MCP_VERSION 2>/dev/null || true
+else
+    git clone --depth 1 --branch $MCP_VERSION \
+        https://github.com/bbernstein/lacylights-mcp.git \
+        /opt/lacylights/mcp
 fi
+echo "[SUCCESS] MCP repository ready"
 
-# Copy backend
-print_info "Copying backend (lacylights-node)..."
-rsync -avz --delete \
-    --exclude 'node_modules' \
-    --exclude '.git' \
-    --exclude '.env.local' \
-    --exclude 'dist' \
-    --exclude '.DS_Store' \
-    --exclude 'coverage' \
-    --exclude '*.log' \
-    --exclude '__tests__' \
-    "$PARENT_DIR/lacylights-node/" "$PI_HOST:/opt/lacylights/backend/"
+EOF
 
-print_success "Backend copied"
-
-# Copy frontend
-print_info "Copying frontend (lacylights-fe)..."
-rsync -avz --delete \
-    --exclude 'node_modules' \
-    --exclude '.git' \
-    --exclude '.next' \
-    --exclude 'out' \
-    --exclude '.DS_Store' \
-    --exclude 'coverage' \
-    --exclude '*.log' \
-    --exclude '__tests__' \
-    "$PARENT_DIR/lacylights-fe/" "$PI_HOST:/opt/lacylights/frontend-src/"
-
-print_success "Frontend copied"
-
-# Copy MCP if available
-if [ -d "$PARENT_DIR/lacylights-mcp" ]; then
-    print_info "Copying MCP server (lacylights-mcp)..."
-    rsync -avz --delete \
-        --exclude 'node_modules' \
-        --exclude '.git' \
-        --exclude 'dist' \
-        --exclude '.DS_Store' \
-        --exclude 'coverage' \
-        --exclude '*.log' \
-        --exclude '__tests__' \
-        "$PARENT_DIR/lacylights-mcp/" "$PI_HOST:/opt/lacylights/mcp/"
-    print_success "MCP server copied"
-fi
+print_success "All repositories cloned from GitHub"
 
 # Build projects
 print_header "Step 7: Building Projects"

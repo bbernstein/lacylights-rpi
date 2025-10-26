@@ -14,11 +14,9 @@ This guide walks you through setting up LacyLights on a fresh Raspberry Pi from 
 ### Software
 - **Raspberry Pi OS** (64-bit, Lite or Desktop)
 - **Development machine** (macOS, Linux, or Windows with WSL)
-- All LacyLights repositories cloned locally:
-  - `lacylights-node` (backend)
-  - `lacylights-fe` (frontend)
-  - `lacylights-mcp` (MCP server)
-  - `lacylights-rpi` (deployment tools)
+- **lacylights-rpi** repository cloned locally (deployment tools)
+
+**Note:** Other repositories (backend, frontend, MCP) are cloned directly from GitHub to the Pi during setup.
 
 ### Network
 - Local network with DHCP
@@ -31,7 +29,15 @@ For a fresh Raspberry Pi with SSH enabled:
 
 ```bash
 cd lacylights-rpi
+
+# Setup with latest code from GitHub
 ./scripts/setup-new-pi.sh pi@raspberrypi.local
+
+# Or specify specific versions:
+./scripts/setup-new-pi.sh pi@raspberrypi.local \
+    --backend-version v1.1.0 \
+    --frontend-version v0.2.0 \
+    --mcp-version v1.0.0
 ```
 
 This one command will:
@@ -39,10 +45,12 @@ This one command will:
 2. Configure networking and hostname
 3. Set up PostgreSQL database
 4. Create system user and permissions
-5. Deploy all application code
+5. Clone all application code from GitHub
 6. Build and start services
 
 **Setup time:** 15-20 minutes
+
+**Note:** Repositories are cloned directly from GitHub to the Pi, so you don't need them locally.
 
 ## Detailed Setup Process
 
@@ -193,21 +201,48 @@ This:
 - Creates `/opt/lacylights/` directories
 - Installs sudoers file for WiFi management
 
-### 5. Deploy Application Code
+### 5. Clone Application Code
 
-From your development machine:
-
-```bash
-cd lacylights-rpi
-./scripts/deploy.sh
-```
-
-### 6. Run Database Migrations
+The repositories are cloned from GitHub on the Pi:
 
 ```bash
 ssh pi@lacylights.local
+
+# Clone backend (main branch)
+git clone https://github.com/bbernstein/lacylights-node.git /opt/lacylights/backend
+
+# Clone frontend (main branch)
+git clone https://github.com/bbernstein/lacylights-fe.git /opt/lacylights/frontend-src
+
+# Clone MCP server (main branch)
+git clone https://github.com/bbernstein/lacylights-mcp.git /opt/lacylights/mcp
+
+# Or clone specific versions:
+# git clone --depth 1 --branch v1.1.0 https://github.com/bbernstein/lacylights-node.git /opt/lacylights/backend
+```
+
+### 6. Build Projects
+
+```bash
+ssh pi@lacylights.local
+
+# Build backend
 cd /opt/lacylights/backend
+npm install
+npm run build
+
+# Run database migrations
 npx prisma migrate deploy
+
+# Build frontend
+cd /opt/lacylights/frontend-src
+npm install
+npm run build
+
+# Build MCP server
+cd /opt/lacylights/mcp
+npm install
+npm run build
 ```
 
 ### 7. Install and Start Service
