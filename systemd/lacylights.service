@@ -1,0 +1,44 @@
+[Unit]
+Description=LacyLights Stage Lighting Control
+Documentation=https://github.com/bbernstein/lacylights
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=lacylights
+Group=lacylights
+WorkingDirectory=/opt/lacylights/backend
+
+# Environment variables
+Environment="NODE_ENV=production"
+Environment="PORT=4000"
+EnvironmentFile=/opt/lacylights/backend/.env
+
+# Start the backend server
+ExecStart=/usr/bin/node /opt/lacylights/backend/dist/index.js
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitBurst=3
+StartLimitInterval=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lacylights
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lacylights
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

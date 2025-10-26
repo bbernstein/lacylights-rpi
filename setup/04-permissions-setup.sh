@@ -1,0 +1,98 @@
+#!/bin/bash
+
+# LacyLights Permissions Setup
+# Creates system user and sets up sudoers for WiFi management
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_header() {
+    echo ""
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}========================================${NC}"
+}
+
+print_header "LacyLights Permissions Setup"
+
+# Get script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+
+# Create lacylights system user
+print_info "Creating lacylights system user..."
+
+if id "lacylights" &>/dev/null; then
+    print_success "User lacylights already exists"
+else
+    sudo useradd --system --no-create-home --shell /usr/sbin/nologin lacylights
+    print_success "User lacylights created"
+fi
+
+# Create lacylights group
+if getent group lacylights &>/dev/null; then
+    print_success "Group lacylights already exists"
+else
+    sudo groupadd lacylights
+    print_success "Group lacylights created"
+fi
+
+# Add lacylights user to lacylights group
+sudo usermod -a -G lacylights lacylights
+
+# Create application directories
+print_info "Creating application directories..."
+
+sudo mkdir -p /opt/lacylights/{backend,frontend-src,mcp}
+sudo chown -R lacylights:lacylights /opt/lacylights
+sudo chmod -R 755 /opt/lacylights
+
+print_success "Application directories created"
+
+# Install sudoers file for WiFi management
+print_info "Installing sudoers file for WiFi management..."
+
+if [ -f "$REPO_DIR/config/sudoers.d/lacylights" ]; then
+    sudo cp "$REPO_DIR/config/sudoers.d/lacylights" /etc/sudoers.d/lacylights
+    sudo chmod 0440 /etc/sudoers.d/lacylights
+    sudo chown root:root /etc/sudoers.d/lacylights
+
+    # Validate sudoers file
+    if sudo visudo -c -f /etc/sudoers.d/lacylights; then
+        print_success "Sudoers file installed and validated"
+    else
+        print_error "Sudoers file validation failed"
+        sudo rm /etc/sudoers.d/lacylights
+        exit 1
+    fi
+else
+    print_error "Sudoers file not found at $REPO_DIR/config/sudoers.d/lacylights"
+    exit 1
+fi
+
+print_header "Permissions Setup Complete"
+print_success "User, group, and permissions configured"
+print_info ""
+print_info "Created:"
+print_info "  - User: lacylights (system user)"
+print_info "  - Group: lacylights"
+print_info "  - Directory: /opt/lacylights/"
+print_info "  - Sudoers: /etc/sudoers.d/lacylights (WiFi management)"

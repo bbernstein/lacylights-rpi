@@ -1,0 +1,41 @@
+# LacyLights WiFi Management Permissions
+#
+# This file grants the lacylights user permission to execute NetworkManager (nmcli)
+# commands for WiFi configuration without requiring a password.
+#
+# IMPORTANT: This file must be installed to /etc/sudoers.d/lacylights with:
+#   sudo cp lacylights /etc/sudoers.d/
+#   sudo chmod 0440 /etc/sudoers.d/lacylights
+#   sudo chown root:root /etc/sudoers.d/lacylights
+#
+# These permissions allow the LacyLights web interface to:
+# - Scan for available WiFi networks
+# - Connect to WiFi networks
+# - Disconnect from WiFi networks
+# - Enable/disable the WiFi radio
+# - Manage saved network connections
+#
+# Security Note: These commands only affect WiFi configuration and do not
+# grant broader system access. The lacylights service runs as a dedicated
+# user with limited privileges.
+
+# Allow WiFi device management
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli device wifi *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli device set wlan* *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli device status
+
+# Allow WiFi connection management
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli connection up *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli connection down *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli connection delete *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli connection show *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli connection add *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli connection modify *
+
+# Allow WiFi radio control
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli radio wifi *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli radio all *
+
+# Allow general network status queries (read-only)
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli general status
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli networking connectivity
