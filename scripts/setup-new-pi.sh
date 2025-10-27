@@ -158,7 +158,7 @@ print_success "Network setup complete"
 
 # Run database setup
 print_header "Step 4: Database Setup"
-print_info "Creating PostgreSQL database..."
+print_info "Creating SQLite database directory..."
 
 ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && bash 03-database-setup.sh"
 

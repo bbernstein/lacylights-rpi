@@ -212,6 +212,5 @@ else
     print_info "For more details:"
     print_info "  Service logs: sudo journalctl -u lacylights -n 50"
     print_info "  Service status: sudo systemctl status lacylights"
-    print_info "  Database logs: sudo journalctl -u postgresql -n 50"
     exit 1
 fi

@@ -339,7 +339,7 @@ ssh pi@lacylights.local
 sudo cat /opt/lacylights/backend/.env > ~/lacylights-backup.env
 
 # Database
-pg_dump -U lacylights lacylights > ~/lacylights-backup.sql
+cp /opt/lacylights/backend/prisma/lacylights.db ~/lacylights-backup.db
 ```
 
 Copy to your local machine:
@@ -359,10 +359,12 @@ sudo cp ~/lacylights-backup.env /opt/lacylights/backend/.env
 sudo chown lacylights:lacylights /opt/lacylights/backend/.env
 
 # Restore database
-psql -U lacylights lacylights < ~/lacylights-backup.sql
+sudo systemctl stop lacylights
+cp ~/lacylights-backup.db /opt/lacylights/backend/prisma/lacylights.db
+sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
 
 # Restart service
-sudo systemctl restart lacylights
+sudo systemctl start lacylights
 ```
 
 ## Troubleshooting
@@ -418,9 +420,9 @@ sudo systemctl restart lacylights
    ```
 
 2. Common issues:
-   - Database not running: `sudo systemctl start postgresql`
    - Missing .env file: `sudo cp /opt/lacylights/backend/.env.example /opt/lacylights/backend/.env`
    - Port already in use: `sudo netstat -tlnp | grep 4000`
+   - Database file missing: `cd /opt/lacylights/backend && npx prisma migrate deploy`
 
 3. Try manual start for details:
    ```bash

@@ -405,7 +405,7 @@ ssh-copy-id pi@lacylights.local
 ssh pi@lacylights.local
 
 # Backup database
-pg_dump -U lacylights lacylights > ~/lacylights-backup.sql
+cp /opt/lacylights/backend/prisma/lacylights.db ~/lacylights-backup.db
 
 # Backup config
 sudo cp /opt/lacylights/backend/.env ~/lacylights-config.backup
@@ -422,8 +422,10 @@ scp ./backups/lacylights-backup.sql pi@lacylights.local:~/
 
 # Restore
 ssh pi@lacylights.local
-psql -U lacylights lacylights < ~/lacylights-backup.sql
-sudo systemctl restart lacylights
+sudo systemctl stop lacylights
+cp ~/lacylights-backup.db /opt/lacylights/backend/prisma/lacylights.db
+sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
+sudo systemctl start lacylights
 ```
 
 ## Contributing
@@ -497,8 +499,8 @@ ssh pi@lacylights.local '~/lacylights-setup/utils/check-health.sh'  # Health che
 ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'  # WiFi check
 
 # Database
-ssh pi@lacylights.local 'psql -U lacylights lacylights'        # Connect to DB
-ssh pi@lacylights.local 'pg_dump -U lacylights lacylights > backup.sql'  # Backup
+ssh pi@lacylights.local 'sqlite3 /opt/lacylights/backend/prisma/lacylights.db'  # Connect to DB
+ssh pi@lacylights.local 'cp /opt/lacylights/backend/prisma/lacylights.db ~/backup.db'  # Backup
 ```
 
 ---
