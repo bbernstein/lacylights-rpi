@@ -172,61 +172,76 @@ ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 04-permissions-setup
 
 print_success "Permissions setup complete"
 
-# Clone repositories from GitHub
-print_header "Step 6: Cloning Repositories from GitHub"
-print_info "Cloning LacyLights repositories from GitHub..."
+# Download release archives from GitHub
+print_header "Step 6: Downloading Releases from GitHub"
+print_info "Downloading LacyLights release archives from GitHub..."
 
 ssh "$PI_HOST" << EOF
 set -e
 
-# Clone backend
-echo "[INFO] Cloning backend (lacylights-node) version $BACKEND_VERSION..."
-if [ -d /opt/lacylights/backend/.git ]; then
-    echo "[INFO] Backend repository exists, updating..."
-    cd /opt/lacylights/backend
-    git fetch origin
-    git checkout $BACKEND_VERSION
-    git pull origin $BACKEND_VERSION 2>/dev/null || true
-else
-    git clone --depth 1 --branch $BACKEND_VERSION \
-        https://github.com/bbernstein/lacylights-node.git \
-        /opt/lacylights/backend
-fi
-echo "[SUCCESS] Backend repository ready"
+# Helper function to download and extract GitHub archive
+download_release() {
+    local repo=\$1
+    local version=\$2
+    local dest=\$3
+    local repo_name=\$(basename \$repo)
 
-# Clone frontend
-echo "[INFO] Cloning frontend (lacylights-fe) version $FRONTEND_VERSION..."
-if [ -d /opt/lacylights/frontend-src/.git ]; then
-    echo "[INFO] Frontend repository exists, updating..."
-    cd /opt/lacylights/frontend-src
-    git fetch origin
-    git checkout $FRONTEND_VERSION
-    git pull origin $FRONTEND_VERSION 2>/dev/null || true
-else
-    git clone --depth 1 --branch $FRONTEND_VERSION \
-        https://github.com/bbernstein/lacylights-fe.git \
-        /opt/lacylights/frontend-src
-fi
-echo "[SUCCESS] Frontend repository ready"
+    echo "[INFO] Downloading \$repo_name version \$version..."
 
-# Clone MCP server
-echo "[INFO] Cloning MCP server (lacylights-mcp) version $MCP_VERSION..."
-if [ -d /opt/lacylights/mcp/.git ]; then
-    echo "[INFO] MCP repository exists, updating..."
-    cd /opt/lacylights/mcp
-    git fetch origin
-    git checkout $MCP_VERSION
-    git pull origin $MCP_VERSION 2>/dev/null || true
-else
-    git clone --depth 1 --branch $MCP_VERSION \
-        https://github.com/bbernstein/lacylights-mcp.git \
-        /opt/lacylights/mcp
-fi
-echo "[SUCCESS] MCP repository ready"
+    # Determine if version is a tag or branch
+    if [[ "\$version" =~ ^v[0-9] ]]; then
+        # It's a tag
+        url="https://github.com/\$repo/archive/refs/tags/\${version}.tar.gz"
+    else
+        # It's a branch
+        url="https://github.com/\$repo/archive/refs/heads/\${version}.tar.gz"
+    fi
+
+    # Create temp directory
+    mkdir -p /tmp/lacylights-downloads
+    cd /tmp/lacylights-downloads
+
+    # Download archive
+    curl -L -o "\${repo_name}.tar.gz" "\$url"
+
+    # Extract archive
+    tar -xzf "\${repo_name}.tar.gz"
+
+    # Find extracted directory (handle various naming formats)
+    extracted_dir=\$(find . -maxdepth 1 -type d -name "\${repo_name}-*" | head -1)
+
+    if [ -z "\$extracted_dir" ]; then
+        echo "[ERROR] Failed to find extracted directory for \$repo_name"
+        return 1
+    fi
+
+    # Remove destination if it exists
+    rm -rf "\$dest"
+
+    # Move to destination
+    mv "\$extracted_dir" "\$dest"
+
+    # Clean up
+    rm -f "\${repo_name}.tar.gz"
+
+    echo "[SUCCESS] \$repo_name ready at \$dest"
+}
+
+# Download backend
+download_release "bbernstein/lacylights-node" "$BACKEND_VERSION" "/opt/lacylights/backend"
+
+# Download frontend
+download_release "bbernstein/lacylights-fe" "$FRONTEND_VERSION" "/opt/lacylights/frontend-src"
+
+# Download MCP server
+download_release "bbernstein/lacylights-mcp" "$MCP_VERSION" "/opt/lacylights/mcp"
+
+# Clean up temp directory
+rm -rf /tmp/lacylights-downloads
 
 EOF
 
-print_success "All repositories cloned from GitHub"
+print_success "All release archives downloaded and extracted"
 
 # Build projects
 print_header "Step 7: Building Projects"

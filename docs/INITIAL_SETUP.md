@@ -45,12 +45,12 @@ This one command will:
 2. Configure networking and hostname
 3. Set up SQLite database directory
 4. Create system user and permissions
-5. Clone all application code from GitHub
+5. Download all application release archives from GitHub
 6. Build and start services
 
 **Setup time:** 15-20 minutes
 
-**Note:** Repositories are cloned directly from GitHub to the Pi, so you don't need them locally.
+**Note:** Release archives are downloaded directly from GitHub to the Pi (no git repositories), so you don't need them locally.
 
 ## Detailed Setup Process
 
@@ -203,24 +203,26 @@ This:
 - Creates `/opt/lacylights/` directories
 - Installs sudoers file for WiFi management
 
-### 5. Clone Application Code
+### 5. Download Application Code
 
-The repositories are cloned from GitHub on the Pi:
+Release archives are downloaded from GitHub on the Pi:
 
 ```bash
 ssh pi@lacylights.local
 
-# Clone backend (main branch)
-git clone https://github.com/bbernstein/lacylights-node.git /opt/lacylights/backend
+# Download and extract releases manually (usually done by setup script):
+cd /tmp
+curl -L https://github.com/bbernstein/lacylights-node/archive/refs/tags/v1.1.0.tar.gz | tar -xz
+mv lacylights-node-* /opt/lacylights/backend
 
-# Clone frontend (main branch)
-git clone https://github.com/bbernstein/lacylights-fe.git /opt/lacylights/frontend-src
+curl -L https://github.com/bbernstein/lacylights-fe/archive/refs/tags/v0.2.0.tar.gz | tar -xz
+mv lacylights-fe-* /opt/lacylights/frontend-src
 
-# Clone MCP server (main branch)
-git clone https://github.com/bbernstein/lacylights-mcp.git /opt/lacylights/mcp
+curl -L https://github.com/bbernstein/lacylights-mcp/archive/refs/tags/v1.0.0.tar.gz | tar -xz
+mv lacylights-mcp-* /opt/lacylights/mcp
 
-# Or clone specific versions:
-# git clone --depth 1 --branch v1.1.0 https://github.com/bbernstein/lacylights-node.git /opt/lacylights/backend
+# Or for main branch:
+# curl -L https://github.com/bbernstein/lacylights-node/archive/refs/heads/main.tar.gz | tar -xz
 ```
 
 ### 6. Build Projects

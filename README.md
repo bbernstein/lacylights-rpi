@@ -39,7 +39,7 @@ cd lacylights-rpi
 
 Then access your LacyLights at: **http://lacylights.local**
 
-**Note:** The setup script clones repositories directly from GitHub to the Pi, so you don't need to have them cloned locally.
+**Note:** The setup script downloads release archives directly from GitHub to the Pi (no git repositories created), so you don't need to have them cloned locally.
 
 ### Deploying Updates
 
@@ -114,7 +114,7 @@ Complete guides in `docs/`:
 - SSH client
 - This repository cloned: [lacylights-rpi](https://github.com/bbernstein/lacylights-rpi)
 
-**For fresh installation:** Repositories are cloned directly from GitHub to the Pi during setup.
+**For fresh installation:** Release archives are downloaded directly from GitHub to the Pi during setup (no git repositories).
 
 **For development workflow:** Clone the application repositories locally:
   - [lacylights-node](https://github.com/bbernstein/lacylights-node) (backend)
