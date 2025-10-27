@@ -259,19 +259,27 @@ sudo systemctl start lacylights
 
 ## Network Configuration
 
-### Dual Network Setup
+### Dual Network Setup with Automatic Routing
 
-LacyLights uses two network interfaces:
+LacyLights uses an intelligent dual-network configuration:
 
-1. **Ethernet (eth0)** - DMX/Art-Net lighting network
+1. **Ethernet (eth0)** - Local DMX/Art-Net lighting network
    - Connect to DMX lighting fixtures
    - Configure broadcast address in settings
    - Example: 192.168.1.255 for 192.168.1.x network
+   - **Routing:** Automatically configured for local traffic only
 
-2. **WiFi (wlan0)** - External internet access
-   - Connect to your local WiFi for internet
+2. **WiFi (wlan0)** - External internet access (optional)
+   - Connect to any WiFi network via web interface
    - Used by MCP server to reach AI models
-   - Configured via web interface
+   - Used for system updates and GitHub access
+   - **Routing:** Automatically becomes primary internet gateway when connected
+
+The setup script automatically configures route priorities so:
+- Internet traffic routes through WiFi (when available)
+- Local DMX traffic routes through Ethernet
+- Device works standalone without WiFi
+- No SSID hardcoding - works with any user-configured WiFi network
 
 ### Setting Up WiFi
 

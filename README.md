@@ -216,21 +216,31 @@ ssh pi@lacylights.local 'sudo systemctl restart lacylights'
 
 ## Network Architecture
 
-LacyLights uses a dual-network setup:
+LacyLights uses an **intelligent dual-network setup** that automatically routes traffic appropriately:
 
-### Wired Network (eth0)
-- **Purpose:** DMX/Art-Net lighting control
+### Wired Network (eth0) - Local DMX Network
+- **Purpose:** DMX/Art-Net lighting control (local only)
 - **Configuration:** DHCP or static IP
 - **Broadcast:** Configurable in settings (e.g., 192.168.1.255)
 - **Usage:** Communication with DMX lighting fixtures
+- **Routing:** Low priority for internet (high metric = 200)
 
-### Wireless Network (wlan0)
+### Wireless Network (wlan0) - Internet Gateway
 - **Purpose:** External internet access
-- **Configuration:** Web interface or command line
-- **Usage:** AI model access (OpenAI, Claude), system updates
+- **Configuration:** Web interface or command line (any SSID)
+- **Usage:** AI model access (OpenAI, Claude), system updates, GitHub downloads
+- **Routing:** High priority for internet (low metric = 100)
 - **Setup:** See [WIFI_SETUP.md](docs/WIFI_SETUP.md)
 
-This dual setup keeps your lighting network isolated while providing internet connectivity.
+### Automatic Route Management
+
+The system automatically configures routing priorities:
+- **Internet traffic** → Always routes through WiFi (when connected)
+- **Local DMX traffic** → Always routes through Ethernet
+- **Works standalone** → Operates on local network without WiFi
+- **No hardcoding** → Works with any WiFi network configured by user
+
+This is handled by a NetworkManager dispatcher script that automatically sets route metrics whenever a network interface changes state.
 
 ## Environment Variables
 
