@@ -312,8 +312,47 @@ EOF
 
 print_success "All release archives downloaded and extracted"
 
+# Create .env file for backend
+print_header "Step 8: Creating Configuration Files"
+print_info "Creating backend .env file..."
+
+ssh "$PI_HOST" << 'ENVSETUP'
+set -e
+
+# Create .env file for backend
+cd /opt/lacylights/backend
+
+# Check if .env.example exists
+if [ -f .env.example ]; then
+    echo "[INFO] Copying .env.example to .env"
+    cp .env.example .env
+else
+    echo "[INFO] Creating .env from scratch"
+    touch .env
+fi
+
+# Ensure DATABASE_URL is set
+if ! grep -q "^DATABASE_URL=" .env; then
+    echo "[INFO] Adding DATABASE_URL to .env"
+    echo 'DATABASE_URL="file:./prisma/lacylights.db"' >> .env
+fi
+
+# Ensure basic settings are present
+if ! grep -q "^NODE_ENV=" .env; then
+    echo 'NODE_ENV=production' >> .env
+fi
+
+if ! grep -q "^PORT=" .env; then
+    echo 'PORT=4000' >> .env
+fi
+
+echo "[SUCCESS] Backend .env file created"
+ENVSETUP
+
+print_success "Configuration files created"
+
 # Build projects (while still owned by pi user)
-print_header "Step 8: Building Projects"
+print_header "Step 9: Building Projects"
 print_info "Building backend, frontend, and MCP..."
 print_info "Note: Building as pi user before transferring ownership to lacylights"
 
@@ -345,7 +384,7 @@ ENDSSH
 print_success "All projects built"
 
 # Install service
-print_header "Step 9: Installing Service"
+print_header "Step 10: Installing Service"
 print_info "Installing systemd service..."
 
 ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 05-service-install.sh"
@@ -358,7 +397,7 @@ ssh "$PI_HOST" "sudo chown -R lacylights:lacylights /opt/lacylights"
 print_success "Permissions fixed"
 
 # Start service
-print_header "Step 10: Starting Service"
+print_header "Step 11: Starting Service"
 print_info "Starting LacyLights service..."
 
 ssh "$PI_HOST" "sudo systemctl start lacylights"
