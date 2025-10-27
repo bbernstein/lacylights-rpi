@@ -331,19 +331,31 @@ else
     touch .env
 fi
 
-# Ensure DATABASE_URL is set
-if ! grep -q "^DATABASE_URL=" .env; then
-    echo "[INFO] Adding DATABASE_URL to .env"
-    echo 'DATABASE_URL="file:./prisma/lacylights.db"' >> .env
+# Set DATABASE_URL to absolute path for production
+echo "[INFO] Setting DATABASE_URL for production"
+if grep -q "^DATABASE_URL=" .env; then
+    # Replace existing DATABASE_URL
+    sed -i 's|^DATABASE_URL=.*|DATABASE_URL="file:/opt/lacylights/backend/prisma/dev.db"|' .env
+else
+    # Add DATABASE_URL
+    echo 'DATABASE_URL="file:/opt/lacylights/backend/prisma/dev.db"' >> .env
 fi
 
-# Ensure basic settings are present
-if ! grep -q "^NODE_ENV=" .env; then
+# Ensure production settings
+echo "[INFO] Configuring production settings"
+if grep -q "^NODE_ENV=" .env; then
+    sed -i 's|^NODE_ENV=.*|NODE_ENV=production|' .env
+else
     echo 'NODE_ENV=production' >> .env
 fi
 
 if ! grep -q "^PORT=" .env; then
     echo 'PORT=4000' >> .env
+fi
+
+# Set Art-Net broadcast to avoid interactive prompt
+if ! grep -q "^ARTNET_BROADCAST=" .env; then
+    echo '# ARTNET_BROADCAST=10.0.8.255  # Uncomment and adjust for your network' >> .env
 fi
 
 echo "[SUCCESS] Backend .env file created"
