@@ -217,9 +217,24 @@ print_success "Network check passed"
 print_header "Step 7: Downloading Releases from GitHub"
 print_info "Downloading LacyLights release archives from GitHub..."
 
-# Ensure pi user can write to /opt/lacylights during setup
-print_info "Temporarily adjusting permissions for downloads..."
-ssh "$PI_HOST" "sudo chown -R pi:pi /opt/lacylights"
+# Ensure directories exist and pi user can write during setup
+print_info "Preparing directories for downloads..."
+ssh "$PI_HOST" << 'DIRSETUP'
+set -e
+
+# Ensure /opt/lacylights exists
+sudo mkdir -p /opt/lacylights
+
+# Give pi user temporary ownership for downloads
+sudo chown -R pi:pi /opt/lacylights
+
+# Ensure parent directory is accessible
+sudo chmod 755 /opt/lacylights
+
+echo "[SUCCESS] Directories prepared"
+DIRSETUP
+
+print_success "Directories ready for downloads"
 
 ssh "$PI_HOST" << EOF
 set -e
@@ -260,11 +275,20 @@ download_release() {
         return 1
     fi
 
+    # Ensure parent directory exists
+    dest_parent=\$(dirname "\$dest")
+    mkdir -p "\$dest_parent"
+
     # Remove destination if it exists
     rm -rf "\$dest"
 
     # Move to destination
-    mv "\$extracted_dir" "\$dest"
+    if ! mv "\$extracted_dir" "\$dest"; then
+        echo "[ERROR] Failed to move \$extracted_dir to \$dest"
+        ls -la "\$(dirname "\$dest")" || true
+        ls -la "\$extracted_dir" || true
+        return 1
+    fi
 
     # Clean up
     rm -f "\${repo_name}.tar.gz"
