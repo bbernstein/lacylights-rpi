@@ -33,22 +33,22 @@ print_header() {
 
 print_header "LacyLights Database Setup"
 
-# Create database directory
-print_info "Creating database directory..."
-mkdir -p /opt/lacylights/backend/prisma
-print_success "Database directory created"
+# Note: Directory creation happens in Step 7 (Downloading Releases)
+# This step just validates prerequisites
 
-# Create database URL configuration
-print_info "Saving database connection string..."
-mkdir -p /tmp/lacylights-setup
-cat > /tmp/lacylights-setup/database.env << 'EOF'
-# Database connection string for SQLite
-# Add this to /opt/lacylights/backend/.env
-DATABASE_URL="file:./prisma/lacylights.db"
-EOF
+print_info "Validating database prerequisites..."
 
-print_success "Database setup complete"
+# Check if sqlite3 is available (optional, but useful for troubleshooting)
+if ! command -v sqlite3 &> /dev/null; then
+    print_info "Note: sqlite3 command not found (not required, but useful for database inspection)"
+else
+    SQLITE_VERSION=$(sqlite3 --version | awk '{print $1}')
+    print_success "sqlite3 available: version $SQLITE_VERSION"
+fi
+
+print_success "Database prerequisites validated"
 print_info ""
-print_info "SQLite database will be created at: /opt/lacylights/backend/prisma/lacylights.db"
-print_info "Database will be initialized when migrations are run during service installation"
-print_info "Connection string saved to: /tmp/lacylights-setup/database.env"
+print_info "Database configuration:"
+print_info "  - Type: SQLite"
+print_info "  - Location: /opt/lacylights/backend/prisma/dev.db"
+print_info "  - Will be created during migrations in Step 9 (Building Projects)"
