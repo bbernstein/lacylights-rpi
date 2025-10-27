@@ -184,7 +184,8 @@ for project in backend frontend mcp; do
         print_info "Creating clean package cache for $project..."
         # Create a portable node_modules that works on ARM
         # We'll let the Pi rebuild native modules
-        tar -czf "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" node_modules/
+        # Disable macOS extended attributes to avoid warnings on Linux
+        COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" node_modules/
 
         print_success "$project dependencies cached"
     fi
@@ -241,7 +242,8 @@ print_header "Creating Bundle Archive"
 BUNDLE_NAME="lacylights-offline-$(date +%Y%m%d-%H%M%S).tar.gz"
 print_info "Creating $BUNDLE_NAME..."
 
-tar -czf "$BUNDLE_NAME" -C "$OUTPUT_DIR" .
+# Disable macOS extended attributes to create portable archive
+COPYFILE_DISABLE=1 tar -czf "$BUNDLE_NAME" -C "$OUTPUT_DIR" .
 
 print_success "Bundle archive created: $BUNDLE_NAME"
 
