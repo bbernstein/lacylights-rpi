@@ -312,14 +312,10 @@ EOF
 
 print_success "All release archives downloaded and extracted"
 
-# Fix ownership back to lacylights user
-print_info "Restoring proper ownership..."
-ssh "$PI_HOST" "sudo chown -R lacylights:lacylights /opt/lacylights"
-print_success "Ownership restored"
-
-# Build projects
+# Build projects (while still owned by pi user)
 print_header "Step 8: Building Projects"
 print_info "Building backend, frontend, and MCP..."
+print_info "Note: Building as pi user before transferring ownership to lacylights"
 
 ssh "$PI_HOST" << 'ENDSSH'
 set -e
