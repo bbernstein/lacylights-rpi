@@ -69,7 +69,7 @@ This repository provides:
 ### Setup Modules
 
 Modular setup scripts in `setup/`:
-- `01-system-setup.sh` - Install dependencies (Node.js, PostgreSQL, etc.)
+- `01-system-setup.sh` - Install dependencies (Node.js, NetworkManager, etc.)
 - `02-network-setup.sh` - Configure networking and hostname
 - `03-database-setup.sh` - Create database and user
 - `04-permissions-setup.sh` - Set up system user and permissions
@@ -147,7 +147,7 @@ lacylights-rpi/
 ├── setup/
 │   ├── 01-system-setup.sh           # Install system packages
 │   ├── 02-network-setup.sh          # Configure network
-│   ├── 03-database-setup.sh         # Setup PostgreSQL
+│   ├── 03-database-setup.sh         # Setup SQLite database
 │   ├── 04-permissions-setup.sh      # User and permissions
 │   └── 05-service-install.sh        # Install systemd service
 ├── utils/
@@ -232,8 +232,8 @@ This dual setup keeps your lighting network isolated while providing internet co
 Key configuration in `/opt/lacylights/backend/.env`:
 
 ```bash
-# Database
-DATABASE_URL="postgresql://lacylights:password@localhost:5432/lacylights"
+# Database (SQLite)
+DATABASE_URL="file:./prisma/lacylights.db"
 
 # Server
 PORT=4000
@@ -349,9 +349,6 @@ ssh pi@lacylights.local 'sudo journalctl -u lacylights -n 50'
 
 # Common fixes
 ssh pi@lacylights.local << 'EOF'
-  # Ensure database is running
-  sudo systemctl start postgresql
-
   # Rebuild
   cd /opt/lacylights/backend
   npm run build

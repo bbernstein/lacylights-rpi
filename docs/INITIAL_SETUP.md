@@ -43,7 +43,7 @@ cd lacylights-rpi
 This one command will:
 1. Install all system dependencies
 2. Configure networking and hostname
-3. Set up PostgreSQL database
+3. Set up SQLite database directory
 4. Create system user and permissions
 5. Clone all application code from GitHub
 6. Build and start services
@@ -157,9 +157,10 @@ sudo bash 01-system-setup.sh
 
 This installs:
 - Node.js 20
-- PostgreSQL
 - NetworkManager
 - Build tools
+
+**Note:** SQLite is included with Prisma, no separate database installation needed.
 
 ### 2. Network Configuration
 
@@ -184,11 +185,12 @@ sudo bash 03-database-setup.sh
 ```
 
 This:
-- Creates `lacylights` database
-- Creates `lacylights` user with random password
-- Grants necessary privileges
+- Creates database directory at `/opt/lacylights/backend/prisma/`
+- Saves SQLite connection string
 
 The database connection string is saved to `/tmp/lacylights-setup/database.env`
+
+**Note:** The SQLite database file will be created automatically when migrations run.
 
 ### 4. Permissions Setup
 
@@ -431,24 +433,26 @@ sudo systemctl restart lacylights
 **Problem:** Cannot connect to database
 
 **Solutions:**
-1. Check PostgreSQL is running:
+1. Check database file exists:
    ```bash
-   sudo systemctl status postgresql
+   ls -la /opt/lacylights/backend/prisma/lacylights.db
    ```
 
-2. Verify database exists:
-   ```bash
-   sudo -u postgres psql -l | grep lacylights
-   ```
-
-3. Check connection string in .env:
+2. Check connection string in .env:
    ```bash
    sudo grep DATABASE_URL /opt/lacylights/backend/.env
    ```
 
-4. Test connection:
+3. Verify file permissions:
    ```bash
-   psql "postgresql://lacylights:password@localhost:5432/lacylights"
+   sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
+   sudo chmod 644 /opt/lacylights/backend/prisma/lacylights.db
+   ```
+
+4. Re-run migrations if database is missing:
+   ```bash
+   cd /opt/lacylights/backend
+   npx prisma migrate deploy
    ```
 
 ### Out of Disk Space
@@ -488,22 +492,13 @@ Default settings should work well. If you experience issues:
    sudo dphys-swapfile swapon
    ```
 
-2. **Optimize PostgreSQL:**
-   ```bash
-   sudo nano /etc/postgresql/*/main/postgresql.conf
-   # Add:
-   # shared_buffers = 128MB
-   # max_connections = 20
-   sudo systemctl restart postgresql
-   ```
-
 ### For Raspberry Pi 3
 
 May require adjustments:
 
 1. Reduce memory limits in systemd service
-2. Use SQLite instead of PostgreSQL (requires code changes)
-3. Disable MCP server if not needed
+2. Disable MCP server if not needed
+3. Consider reducing Art-Net refresh rate
 
 ## Next Steps
 

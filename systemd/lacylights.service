@@ -1,8 +1,7 @@
 [Unit]
 Description=LacyLights Stage Lighting Control
 Documentation=https://github.com/bbernstein/lacylights
-After=network.target postgresql.service
-Wants=postgresql.service
+After=network.target
 
 [Service]
 Type=simple
