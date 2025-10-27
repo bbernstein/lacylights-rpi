@@ -10,6 +10,9 @@ Run these commands to quickly identify issues:
 # Overall health check
 ssh pi@lacylights.local '~/lacylights-setup/utils/check-health.sh'
 
+# Network connectivity diagnostics
+ssh pi@lacylights.local '~/lacylights-setup/utils/network-diagnostic.sh'
+
 # WiFi-specific diagnostics
 ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'
 

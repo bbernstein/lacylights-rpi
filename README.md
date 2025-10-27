@@ -80,6 +80,7 @@ Modular setup scripts in `setup/`:
 Diagnostic and maintenance tools in `utils/`:
 - **`check-health.sh`** - Comprehensive system health check
 - **`view-logs.sh`** - Easy log viewing with filtering
+- **`network-diagnostic.sh`** - Network connectivity troubleshooting
 - **`wifi-diagnostic.sh`** - WiFi troubleshooting and diagnostics
 
 ### Documentation
@@ -197,9 +198,13 @@ ssh pi@lacylights.local '~/lacylights-setup/utils/view-logs.sh -n 100'
 ssh pi@lacylights.local '~/lacylights-setup/utils/view-logs.sh -e'
 ```
 
-### Check WiFi
+### Check Network
 
 ```bash
+# General network diagnostics
+ssh pi@lacylights.local '~/lacylights-setup/utils/network-diagnostic.sh'
+
+# WiFi-specific diagnostics
 ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'
 ```
 
@@ -494,9 +499,10 @@ ssh pi@lacylights.local 'sudo reboot'                          # Reboot Pi
 ssh pi@lacylights.local 'sudo journalctl -u lacylights -f'     # Follow logs
 ssh pi@lacylights.local '~/lacylights-setup/utils/view-logs.sh -e'  # View errors
 
-# Health
-ssh pi@lacylights.local '~/lacylights-setup/utils/check-health.sh'  # Health check
-ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'  # WiFi check
+# Health & Diagnostics
+ssh pi@lacylights.local '~/lacylights-setup/utils/check-health.sh'       # Health check
+ssh pi@lacylights.local '~/lacylights-setup/utils/network-diagnostic.sh' # Network check
+ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'    # WiFi check
 
 # Database
 ssh pi@lacylights.local 'sqlite3 /opt/lacylights/backend/prisma/lacylights.db'  # Connect to DB

@@ -172,9 +172,51 @@ ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 04-permissions-setup
 
 print_success "Permissions setup complete"
 
+# Check network connectivity
+print_header "Step 6: Network Connectivity Check"
+print_info "Checking internet connectivity..."
+
+ssh "$PI_HOST" << 'NETCHECK'
+set -e
+
+echo "[INFO] Checking network interfaces..."
+ip addr show | grep -E "^[0-9]+:|inet " || true
+
+echo ""
+echo "[INFO] Checking DNS resolution..."
+if ! host github.com > /dev/null 2>&1; then
+    echo "[ERROR] Cannot resolve github.com"
+    echo "[INFO] Trying to ping 8.8.8.8 (Google DNS)..."
+    if ! ping -c 1 -W 2 8.8.8.8 > /dev/null 2>&1; then
+        echo "[ERROR] No internet connectivity"
+        echo "[ERROR] Please ensure the Pi has internet access (WiFi or Ethernet)"
+        exit 1
+    else
+        echo "[ERROR] Internet works but DNS is not resolving"
+        echo "[INFO] Check /etc/resolv.conf for DNS servers"
+        exit 1
+    fi
+fi
+
+echo "[INFO] Testing connection to github.com..."
+if ! curl -s -m 10 https://github.com > /dev/null 2>&1; then
+    echo "[ERROR] Cannot connect to github.com"
+    echo "[INFO] Please check firewall and network settings"
+    exit 1
+fi
+
+echo "[SUCCESS] Network connectivity OK"
+NETCHECK
+
+print_success "Network check passed"
+
 # Download release archives from GitHub
-print_header "Step 6: Downloading Releases from GitHub"
+print_header "Step 7: Downloading Releases from GitHub"
 print_info "Downloading LacyLights release archives from GitHub..."
+
+# Ensure pi user can write to /opt/lacylights during setup
+print_info "Temporarily adjusting permissions for downloads..."
+ssh "$PI_HOST" "sudo chown -R pi:pi /opt/lacylights"
 
 ssh "$PI_HOST" << EOF
 set -e
@@ -243,8 +285,13 @@ EOF
 
 print_success "All release archives downloaded and extracted"
 
+# Fix ownership back to lacylights user
+print_info "Restoring proper ownership..."
+ssh "$PI_HOST" "sudo chown -R lacylights:lacylights /opt/lacylights"
+print_success "Ownership restored"
+
 # Build projects
-print_header "Step 7: Building Projects"
+print_header "Step 8: Building Projects"
 print_info "Building backend, frontend, and MCP..."
 
 ssh "$PI_HOST" << 'ENDSSH'
@@ -275,7 +322,7 @@ ENDSSH
 print_success "All projects built"
 
 # Install service
-print_header "Step 8: Installing Service"
+print_header "Step 9: Installing Service"
 print_info "Installing systemd service..."
 
 ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 05-service-install.sh"
@@ -288,7 +335,7 @@ ssh "$PI_HOST" "sudo chown -R lacylights:lacylights /opt/lacylights"
 print_success "Permissions fixed"
 
 # Start service
-print_header "Step 9: Starting Service"
+print_header "Step 10: Starting Service"
 print_info "Starting LacyLights service..."
 
 ssh "$PI_HOST" "sudo systemctl start lacylights"
