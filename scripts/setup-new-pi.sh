@@ -184,8 +184,9 @@ ip addr show | grep -E "^[0-9]+:|inet " || true
 
 echo ""
 echo "[INFO] Checking DNS resolution..."
-if ! host github.com > /dev/null 2>&1; then
-    echo "[ERROR] Cannot resolve github.com"
+# Use ping to test DNS (more reliable than 'host' which may not be installed)
+if ! ping -c 1 -W 2 github.com > /dev/null 2>&1; then
+    echo "[ERROR] Cannot resolve or reach github.com"
     echo "[INFO] Trying to ping 8.8.8.8 (Google DNS)..."
     if ! ping -c 1 -W 2 8.8.8.8 > /dev/null 2>&1; then
         echo "[ERROR] No internet connectivity"
@@ -196,11 +197,13 @@ if ! host github.com > /dev/null 2>&1; then
         echo "[INFO] Check /etc/resolv.conf for DNS servers"
         exit 1
     fi
+else
+    echo "[SUCCESS] DNS resolution working"
 fi
 
-echo "[INFO] Testing connection to github.com..."
+echo "[INFO] Testing HTTPS connection to github.com..."
 if ! curl -s -m 10 https://github.com > /dev/null 2>&1; then
-    echo "[ERROR] Cannot connect to github.com"
+    echo "[ERROR] Cannot connect to github.com via HTTPS"
     echo "[INFO] Please check firewall and network settings"
     exit 1
 fi

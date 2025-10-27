@@ -97,18 +97,25 @@ if [ -f /etc/resolv.conf ]; then
     # Test DNS resolution
     print_info "Testing DNS resolution..."
 
-    if host github.com > /dev/null 2>&1; then
-        GITHUB_IP=$(host github.com | grep "has address" | head -1 | awk '{print $4}')
-        print_success "github.com resolves to $GITHUB_IP"
+    # Try ping first (most reliable, always available)
+    if ping -c 1 -W 2 github.com > /dev/null 2>&1; then
+        # Get IP using getent if available, otherwise just report success
+        if command -v getent &> /dev/null; then
+            GITHUB_IP=$(getent hosts github.com | awk '{print $1}' | head -1)
+            print_success "github.com resolves to $GITHUB_IP"
+        else
+            print_success "github.com resolves successfully"
+        fi
     else
         print_error "Cannot resolve github.com"
         ISSUES=$((ISSUES + 1))
 
-        # Try alternative DNS
-        print_info "Trying Google DNS (8.8.8.8)..."
-        if host github.com 8.8.8.8 > /dev/null 2>&1; then
-            print_warning "DNS works with 8.8.8.8 but not with configured DNS"
-            print_info "Consider adding 'nameserver 8.8.8.8' to /etc/resolv.conf"
+        # Try to understand why
+        print_info "Checking if 'host' or 'nslookup' commands are available..."
+        if command -v nslookup &> /dev/null; then
+            nslookup github.com 8.8.8.8 > /dev/null 2>&1 && \
+                print_warning "DNS works with 8.8.8.8 but not with configured DNS" && \
+                print_info "Consider adding 'nameserver 8.8.8.8' to /etc/resolv.conf"
         fi
     fi
 else
