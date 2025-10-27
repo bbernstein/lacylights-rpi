@@ -41,6 +41,7 @@ PI_HOST=""
 BACKEND_VERSION="main"
 FRONTEND_VERSION="main"
 MCP_VERSION="main"
+OFFLINE_BUNDLE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -56,23 +57,35 @@ while [[ $# -gt 0 ]]; do
             MCP_VERSION="$2"
             shift 2
             ;;
+        --offline-bundle)
+            OFFLINE_BUNDLE="$2"
+            shift 2
+            ;;
         --help)
             echo "LacyLights Complete Setup Script"
             echo ""
             echo "Usage: $0 <pi-host> [options]"
             echo ""
             echo "Arguments:"
-            echo "  <pi-host>              SSH connection string (e.g., pi@lacylights.local)"
+            echo "  <pi-host>                 SSH connection string (e.g., pi@lacylights.local)"
             echo ""
             echo "Options:"
-            echo "  --backend-version TAG   Git tag/branch for backend (default: main)"
-            echo "  --frontend-version TAG  Git tag/branch for frontend (default: main)"
-            echo "  --mcp-version TAG       Git tag/branch for MCP server (default: main)"
-            echo "  --help                  Show this help message"
+            echo "  --backend-version TAG     Git tag/branch for backend (default: main)"
+            echo "  --frontend-version TAG    Git tag/branch for frontend (default: main)"
+            echo "  --mcp-version TAG         Git tag/branch for MCP server (default: main)"
+            echo "  --offline-bundle PATH     Use offline bundle (no internet on Pi required)"
+            echo "  --help                    Show this help message"
+            echo ""
+            echo "Offline Installation:"
+            echo "  For Pis without internet access, first prepare an offline bundle:"
+            echo "    ./scripts/prepare-offline.sh"
+            echo "  Then use the bundle for installation:"
+            echo "    $0 pi@lacylights.local --offline-bundle lacylights-offline-*.tar.gz"
             echo ""
             echo "Examples:"
             echo "  $0 pi@lacylights.local"
             echo "  $0 pi@lacylights.local --backend-version v1.1.0 --frontend-version v0.2.0"
+            echo "  $0 pi@lacylights.local --offline-bundle lacylights-offline-20251027-160000.tar.gz"
             exit 0
             ;;
         *)
@@ -96,11 +109,27 @@ if [ -z "$PI_HOST" ]; then
     exit 1
 fi
 
+# Validate offline bundle if provided
+if [ -n "$OFFLINE_BUNDLE" ]; then
+    if [ ! -f "$OFFLINE_BUNDLE" ]; then
+        print_error "Offline bundle not found: $OFFLINE_BUNDLE"
+        print_error "Please run ./scripts/prepare-offline.sh first"
+        exit 1
+    fi
+    print_success "Offline bundle found: $OFFLINE_BUNDLE"
+fi
+
 print_header "LacyLights Complete Setup"
 print_info "Target: $PI_HOST"
-print_info "Backend version: $BACKEND_VERSION"
-print_info "Frontend version: $FRONTEND_VERSION"
-print_info "MCP version: $MCP_VERSION"
+if [ -n "$OFFLINE_BUNDLE" ]; then
+    print_info "Mode: OFFLINE (no internet required on Pi)"
+    print_info "Bundle: $(basename $OFFLINE_BUNDLE)"
+else
+    print_info "Mode: ONLINE (Pi will download from GitHub/npm)"
+    print_info "Backend version: $BACKEND_VERSION"
+    print_info "Frontend version: $FRONTEND_VERSION"
+    print_info "MCP version: $MCP_VERSION"
+fi
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -172,11 +201,12 @@ ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 04-permissions-setup
 
 print_success "Permissions setup complete"
 
-# Check network connectivity
-print_header "Step 6: Network Connectivity Check"
-print_info "Checking internet connectivity..."
+# Check network connectivity (skip in offline mode)
+if [ -z "$OFFLINE_BUNDLE" ]; then
+    print_header "Step 6: Network Connectivity Check"
+    print_info "Checking internet connectivity..."
 
-ssh "$PI_HOST" << 'NETCHECK'
+    ssh "$PI_HOST" << 'NETCHECK'
 set -e
 
 echo "[INFO] Checking network interfaces..."
@@ -211,15 +241,21 @@ fi
 echo "[SUCCESS] Network connectivity OK"
 NETCHECK
 
-print_success "Network check passed"
+    print_success "Network check passed"
+else
+    print_header "Step 6: Network Connectivity Check"
+    print_info "SKIPPED - Using offline bundle (no internet required on Pi)"
+fi
 
-# Download release archives from GitHub
-print_header "Step 7: Downloading Releases from GitHub"
-print_info "Downloading LacyLights release archives from GitHub..."
+# Step 7: Download/Extract releases (online or offline)
+if [ -z "$OFFLINE_BUNDLE" ]; then
+    # ONLINE MODE: Download from GitHub
+    print_header "Step 7: Downloading Releases from GitHub"
+    print_info "Downloading LacyLights release archives from GitHub..."
 
-# Ensure directories exist and pi user can write during setup
-print_info "Preparing directories for downloads..."
-ssh "$PI_HOST" << 'DIRSETUP'
+    # Ensure directories exist and pi user can write during setup
+    print_info "Preparing directories for downloads..."
+    ssh "$PI_HOST" << 'DIRSETUP'
 set -e
 
 # Ensure /opt/lacylights exists
@@ -234,9 +270,9 @@ sudo chmod 755 /opt/lacylights
 echo "[SUCCESS] Directories prepared"
 DIRSETUP
 
-print_success "Directories ready for downloads"
+    print_success "Directories ready for downloads"
 
-ssh "$PI_HOST" << EOF
+    ssh "$PI_HOST" << EOF
 set -e
 
 # Helper function to download and extract GitHub archive
@@ -310,7 +346,70 @@ rm -rf /tmp/lacylights-downloads
 
 EOF
 
-print_success "All release archives downloaded and extracted"
+    print_success "All release archives downloaded and extracted"
+
+else
+    # OFFLINE MODE: Extract from bundle
+    print_header "Step 7: Extracting from Offline Bundle"
+    print_info "Using offline bundle (no internet access required)..."
+
+    # Transfer bundle to Pi
+    print_info "Transferring offline bundle to Pi..."
+    ssh "$PI_HOST" "mkdir -p ~/lacylights-offline"
+    scp "$OFFLINE_BUNDLE" "$PI_HOST:~/lacylights-offline/bundle.tar.gz"
+    print_success "Bundle transferred"
+
+    # Extract and install from bundle
+    print_info "Extracting and installing from bundle..."
+    ssh "$PI_HOST" << 'OFFLINE_INSTALL'
+set -e
+
+cd ~/lacylights-offline
+
+# Extract bundle
+echo "[INFO] Extracting offline bundle..."
+tar -xzf bundle.tar.gz
+
+# Ensure /opt/lacylights exists
+sudo mkdir -p /opt/lacylights
+sudo chown -R pi:pi /opt/lacylights
+sudo chmod 755 /opt/lacylights
+
+# Extract release archives
+echo "[INFO] Extracting backend..."
+mkdir -p /opt/lacylights/backend
+tar -xzf releases/backend.tar.gz -C /opt/lacylights/backend --strip-components=1
+
+echo "[INFO] Extracting frontend..."
+mkdir -p /opt/lacylights/frontend-src
+tar -xzf releases/frontend.tar.gz -C /opt/lacylights/frontend-src --strip-components=1
+
+echo "[INFO] Extracting MCP server..."
+mkdir -p /opt/lacylights/mcp
+tar -xzf releases/mcp.tar.gz -C /opt/lacylights/mcp --strip-components=1
+
+# Extract pre-downloaded node_modules
+echo "[INFO] Extracting pre-downloaded dependencies..."
+if [ -f releases/backend-node_modules.tar.gz ]; then
+    tar -xzf releases/backend-node_modules.tar.gz -C /opt/lacylights/backend/
+    echo "[INFO] Backend dependencies extracted"
+fi
+
+if [ -f releases/frontend-node_modules.tar.gz ]; then
+    tar -xzf releases/frontend-node_modules.tar.gz -C /opt/lacylights/frontend-src/
+    echo "[INFO] Frontend dependencies extracted"
+fi
+
+if [ -f releases/mcp-node_modules.tar.gz ]; then
+    tar -xzf releases/mcp-node_modules.tar.gz -C /opt/lacylights/mcp/
+    echo "[INFO] MCP dependencies extracted"
+fi
+
+echo "[SUCCESS] All files extracted from offline bundle"
+OFFLINE_INSTALL
+
+    print_success "Offline bundle extracted successfully"
+fi
 
 # Create .env file for backend
 print_header "Step 8: Creating Configuration Files"
@@ -365,10 +464,11 @@ print_success "Configuration files created"
 
 # Build projects (while still owned by pi user)
 print_header "Step 9: Building Projects"
-print_info "Building backend, frontend, and MCP..."
-print_info "Note: Building as pi user before transferring ownership to lacylights"
+if [ -z "$OFFLINE_BUNDLE" ]; then
+    print_info "Building backend, frontend, and MCP (ONLINE MODE)..."
+    print_info "Note: Building as pi user before transferring ownership to lacylights"
 
-ssh "$PI_HOST" << 'ENDSSH'
+    ssh "$PI_HOST" << 'ENDSSH'
 set -e
 
 echo "[INFO] Building backend..."
@@ -392,6 +492,38 @@ if [ -d /opt/lacylights/mcp ]; then
 fi
 
 ENDSSH
+
+else
+    print_info "Building with pre-downloaded dependencies (OFFLINE MODE)..."
+    print_info "Note: Rebuilding native modules for ARM architecture"
+
+    ssh "$PI_HOST" << 'OFFLINE_BUILD'
+set -e
+
+echo "[INFO] Rebuilding backend native modules..."
+cd /opt/lacylights/backend
+npm rebuild
+npm run build
+
+echo "[INFO] Running database migrations..."
+npx prisma generate
+npx prisma migrate deploy
+
+echo "[INFO] Rebuilding frontend native modules..."
+cd /opt/lacylights/frontend-src
+npm rebuild
+npm run build
+
+if [ -d /opt/lacylights/mcp ]; then
+    echo "[INFO] Rebuilding MCP server native modules..."
+    cd /opt/lacylights/mcp
+    npm rebuild
+    npm run build
+fi
+
+OFFLINE_BUILD
+
+fi
 
 print_success "All projects built"
 
