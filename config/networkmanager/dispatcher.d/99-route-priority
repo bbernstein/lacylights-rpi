@@ -1,0 +1,51 @@
+#!/bin/bash
+# NetworkManager Dispatcher Script
+# Ensures WiFi is always preferred over Ethernet for internet routing
+# while keeping Ethernet available for local DMX/Art-Net network
+
+# This script runs whenever a network interface changes state
+# Location: /etc/NetworkManager/dispatcher.d/99-route-priority
+
+INTERFACE=$1
+ACTION=$2
+
+# Only act on interface up events
+if [ "$ACTION" != "up" ]; then
+    exit 0
+fi
+
+# Function to set route metrics
+configure_routes() {
+    # Get interface type
+    DEVICE_TYPE=$(nmcli -t -f GENERAL.TYPE device show "$INTERFACE" | cut -d: -f2)
+
+    case "$DEVICE_TYPE" in
+        ethernet)
+            # Ethernet: High metric (low priority) - local network only
+            logger -t route-priority "Configuring $INTERFACE (ethernet) with high metric (local only)"
+            CONNECTION=$(nmcli -t -f GENERAL.CONNECTION device show "$INTERFACE" | cut -d: -f2)
+            if [ -n "$CONNECTION" ]; then
+                nmcli connection modify "$CONNECTION" ipv4.route-metric 200
+                nmcli connection modify "$CONNECTION" ipv6.route-metric 200
+                # Optional: Prevent from being default route entirely
+                # nmcli connection modify "$CONNECTION" ipv4.never-default yes
+            fi
+            ;;
+        wifi)
+            # WiFi: Low metric (high priority) - internet gateway
+            logger -t route-priority "Configuring $INTERFACE (wifi) with low metric (internet gateway)"
+            CONNECTION=$(nmcli -t -f GENERAL.CONNECTION device show "$INTERFACE" | cut -d: -f2)
+            if [ -n "$CONNECTION" ]; then
+                nmcli connection modify "$CONNECTION" ipv4.route-metric 100
+                nmcli connection modify "$CONNECTION" ipv6.route-metric 100
+                # Reload connection to apply metric without interruption
+                nmcli connection reload "$CONNECTION"
+            fi
+            ;;
+    esac
+}
+
+# Configure routes
+configure_routes
+
+exit 0

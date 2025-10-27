@@ -94,23 +94,25 @@ fi
 # Database Status
 print_header "Database Status"
 
-if systemctl is-active --quiet postgresql; then
-    print_success "PostgreSQL is running"
+DB_FILE="/opt/lacylights/backend/prisma/lacylights.db"
 
-    # Check if database exists
-    if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw lacylights; then
-        print_success "LacyLights database exists"
+if [ -f "$DB_FILE" ]; then
+    print_success "SQLite database exists"
 
-        # Check database size
-        DB_SIZE=$(sudo -u postgres psql -d lacylights -t -c "SELECT pg_size_pretty(pg_database_size('lacylights'));" | xargs)
-        print_info "Database size: $DB_SIZE"
+    # Check database size
+    DB_SIZE=$(du -h "$DB_FILE" | cut -f1)
+    print_info "Database size: $DB_SIZE"
+
+    # Check if database is readable
+    if [ -r "$DB_FILE" ]; then
+        print_success "Database file is readable"
     else
-        print_error "LacyLights database not found"
+        print_error "Database file is not readable"
         ISSUES=$((ISSUES + 1))
     fi
 else
-    print_error "PostgreSQL is not running"
-    ISSUES=$((ISSUES + 1))
+    print_warning "SQLite database not found (will be created on first run)"
+    print_info "Expected location: $DB_FILE"
 fi
 
 # Network Status
@@ -210,6 +212,5 @@ else
     print_info "For more details:"
     print_info "  Service logs: sudo journalctl -u lacylights -n 50"
     print_info "  Service status: sudo systemctl status lacylights"
-    print_info "  Database logs: sudo journalctl -u postgresql -n 50"
     exit 1
 fi

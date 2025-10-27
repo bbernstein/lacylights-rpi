@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # LacyLights Database Setup
-# Creates PostgreSQL database and user
+# Creates SQLite database directory and configuration
 
 set -e
 
@@ -33,52 +33,22 @@ print_header() {
 
 print_header "LacyLights Database Setup"
 
-# Start PostgreSQL
-print_info "Starting PostgreSQL..."
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-print_success "PostgreSQL started"
+# Note: Directory creation happens in Step 7 (Downloading Releases)
+# This step just validates prerequisites
 
-# Generate random password for database user
-DB_PASSWORD=$(openssl rand -base64 32)
+print_info "Validating database prerequisites..."
 
-# Check if user exists
-print_info "Checking if lacylights user exists..."
-if sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='lacylights'" | grep -q 1; then
-    print_info "User lacylights already exists"
-    print_info "Updating password..."
-    sudo -u postgres psql -c "ALTER USER lacylights WITH PASSWORD '$DB_PASSWORD';"
+# Check if sqlite3 is available (optional, but useful for troubleshooting)
+if ! command -v sqlite3 &> /dev/null; then
+    print_info "Note: sqlite3 command not found (not required, but useful for database inspection)"
 else
-    print_info "Creating database user: lacylights"
-    sudo -u postgres psql -c "CREATE USER lacylights WITH PASSWORD '$DB_PASSWORD';"
-    print_success "User created"
+    SQLITE_VERSION=$(sqlite3 --version | awk '{print $1}')
+    print_success "sqlite3 available: version $SQLITE_VERSION"
 fi
 
-# Check if database exists
-print_info "Checking if lacylights database exists..."
-if sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='lacylights'" | grep -q 1; then
-    print_success "Database lacylights already exists"
-else
-    print_info "Creating database: lacylights"
-    sudo -u postgres psql -c "CREATE DATABASE lacylights OWNER lacylights;"
-    print_success "Database created"
-fi
-
-# Grant privileges
-print_info "Granting privileges..."
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE lacylights TO lacylights;"
-print_success "Privileges granted"
-
-# Save connection string
-print_info "Saving database connection string..."
-mkdir -p /tmp/lacylights-setup
-cat > /tmp/lacylights-setup/database.env << EOF
-# Database connection string
-# Add this to /opt/lacylights/backend/.env
-DATABASE_URL="postgresql://lacylights:${DB_PASSWORD}@localhost:5432/lacylights"
-EOF
-
-print_success "Database setup complete"
+print_success "Database prerequisites validated"
 print_info ""
-print_info "Database connection string saved to: /tmp/lacylights-setup/database.env"
-print_info "This will be copied to /opt/lacylights/backend/.env during service installation"
+print_info "Database configuration:"
+print_info "  - Type: SQLite"
+print_info "  - Location: /opt/lacylights/backend/prisma/lacylights.db"
+print_info "  - Will be created during migrations in Step 9 (Building Projects)"

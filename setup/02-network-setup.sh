@@ -89,13 +89,44 @@ print_info "Checking wired network..."
 if nmcli device status | grep -q "ethernet.*connected"; then
     ETH_DEVICE=$(nmcli device status | grep "ethernet.*connected" | awk '{print $1}' | head -n 1)
     print_success "Wired connection active on $ETH_DEVICE"
+
+    # Configure Ethernet for local-only traffic (high metric = low priority for internet)
+    print_info "Configuring Ethernet for local network only..."
+    ETH_CONNECTION=$(nmcli -t -f GENERAL.CONNECTION device show "$ETH_DEVICE" | cut -d: -f2)
+    if [ -n "$ETH_CONNECTION" ]; then
+        sudo nmcli connection modify "$ETH_CONNECTION" ipv4.route-metric 200
+        sudo nmcli connection modify "$ETH_CONNECTION" ipv6.route-metric 200
+        print_success "Ethernet configured with low priority for internet routing"
+        print_info "WiFi (when connected) will be used for internet access"
+    fi
 else
     print_error "No active wired connection found"
     print_info "Please ensure ethernet cable is connected"
 fi
 
+# Install NetworkManager dispatcher script for automatic route priority
+print_info "Installing route priority dispatcher script..."
+
+sudo mkdir -p /etc/NetworkManager/dispatcher.d
+
+# Copy dispatcher script from setup directory
+if [ -f ~/lacylights-setup/config/networkmanager/dispatcher.d/99-route-priority ]; then
+    sudo cp ~/lacylights-setup/config/networkmanager/dispatcher.d/99-route-priority \
+        /etc/NetworkManager/dispatcher.d/99-route-priority
+    sudo chmod +x /etc/NetworkManager/dispatcher.d/99-route-priority
+    print_success "Route priority dispatcher installed"
+    print_info "All WiFi connections will automatically have internet routing priority"
+else
+    print_error "Dispatcher script not found at ~/lacylights-setup/config/networkmanager/dispatcher.d/99-route-priority"
+    print_info "Route priority will need to be configured manually"
+fi
+
 print_header "Network Setup Complete"
 print_success "Network configuration completed"
+print_info ""
+print_info "Dual Network Configuration:"
+print_info "  • Ethernet (eth0): Local DMX/Art-Net network"
+print_info "  • WiFi (wlan0): Internet access (when configured)"
 print_info ""
 print_info "Network Status:"
 nmcli device status

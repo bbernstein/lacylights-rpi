@@ -10,6 +10,9 @@ Run these commands to quickly identify issues:
 # Overall health check
 ssh pi@lacylights.local '~/lacylights-setup/utils/check-health.sh'
 
+# Network connectivity diagnostics
+ssh pi@lacylights.local '~/lacylights-setup/utils/network-diagnostic.sh'
+
 # WiFi-specific diagnostics
 ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'
 
@@ -37,21 +40,7 @@ sudo journalctl -u lacylights -n 50
 
 **Common Causes and Solutions:**
 
-#### 1. Database Not Running
-
-```bash
-# Check PostgreSQL
-sudo systemctl status postgresql
-
-# Start if needed
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
-
-# Restart LacyLights
-sudo systemctl restart lacylights
-```
-
-#### 2. Missing or Invalid .env File
+#### 1. Missing or Invalid .env File
 
 ```bash
 # Check if .env exists
@@ -68,7 +57,7 @@ sudo chown lacylights:lacylights /opt/lacylights/backend/.env
 sudo chmod 600 /opt/lacylights/backend/.env
 ```
 
-#### 3. Port Already in Use
+#### 2. Port Already in Use
 
 ```bash
 # Check what's using port 4000
@@ -83,7 +72,7 @@ sudo kill <PID>
 sudo systemctl restart lacylights
 ```
 
-#### 4. Build Artifacts Missing
+#### 3. Build Artifacts Missing
 
 ```bash
 # Rebuild
@@ -114,14 +103,15 @@ sudo systemctl restart lacylights
 #### 1. Database Connection Error
 
 ```bash
-# Test database connection
-psql $(grep DATABASE_URL /opt/lacylights/backend/.env | cut -d'=' -f2 | tr -d '"')
+# Check database file exists
+ls -la /opt/lacylights/backend/prisma/lacylights.db
 
-# If fails, check:
-# - PostgreSQL is running
-# - Database exists
-# - Password is correct
-# - User has privileges
+# Check permissions
+sudo ls -la /opt/lacylights/backend/prisma/
+
+# If database is missing or corrupted, re-run migrations
+cd /opt/lacylights/backend
+npx prisma migrate deploy
 ```
 
 #### 2. Prisma Migration Needed
@@ -376,17 +366,21 @@ echo 'wireless-power off' | sudo tee -a /etc/network/interfaces
 ### Database Connection Failed
 
 **Symptoms:**
-- Service fails with "connection refused"
-- "ECONNREFUSED" errors in logs
+- Service fails with database connection errors
+- "SQLITE_ERROR" or "database locked" errors in logs
 
 **Solutions:**
 
-#### 1. PostgreSQL Not Running
+#### 1. Missing Database File
 
 ```bash
-sudo systemctl status postgresql
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
+# Check if database exists
+ls -la /opt/lacylights/backend/prisma/lacylights.db
+
+# If missing, create directory and run migrations
+mkdir -p /opt/lacylights/backend/prisma
+cd /opt/lacylights/backend
+npx prisma migrate deploy
 ```
 
 #### 2. Wrong Database URL
@@ -395,18 +389,18 @@ sudo systemctl enable postgresql
 # Check .env file
 sudo grep DATABASE_URL /opt/lacylights/backend/.env
 
-# Test connection
-psql "$(sudo grep DATABASE_URL /opt/lacylights/backend/.env | cut -d'=' -f2 | tr -d '"')"
+# Should be: DATABASE_URL="file:./prisma/lacylights.db"
 ```
 
-#### 3. Database Doesn't Exist
+#### 3. Permission Issues
 
 ```bash
-# Check if database exists
-sudo -u postgres psql -l | grep lacylights
+# Fix ownership
+sudo chown -R lacylights:lacylights /opt/lacylights/backend/prisma
 
-# Create if missing
-sudo -u postgres psql -c "CREATE DATABASE lacylights;"
+# Fix permissions
+sudo chmod 755 /opt/lacylights/backend/prisma
+sudo chmod 644 /opt/lacylights/backend/prisma/lacylights.db
 ```
 
 ### Migration Errors
@@ -489,10 +483,11 @@ find . -name "node_modules" -type d -prune -exec rm -rf {} +
 
 ```bash
 # Check database size
-sudo -u postgres psql -d lacylights -c "SELECT pg_size_pretty(pg_database_size('lacylights'));"
+du -h /opt/lacylights/backend/prisma/lacylights.db
 
-# Vacuum database
-sudo -u postgres psql -d lacylights -c "VACUUM FULL ANALYZE;"
+# Optimize SQLite database (reduces file size)
+cd /opt/lacylights/backend
+sqlite3 prisma/lacylights.db "VACUUM;"
 ```
 
 ### High CPU Usage

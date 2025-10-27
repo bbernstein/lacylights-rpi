@@ -60,15 +60,9 @@ fi
 print_success "Node.js installed: $(node -v)"
 print_success "npm installed: $(npm -v)"
 
-# Install PostgreSQL
-print_info "Installing PostgreSQL..."
-
-if command -v psql &> /dev/null; then
-    print_success "PostgreSQL already installed: $(psql --version)"
-else
-    sudo apt-get install -y postgresql postgresql-contrib
-    print_success "PostgreSQL installed"
-fi
+# SQLite is included with Node.js/Prisma, no separate installation needed
+print_info "SQLite will be used for database (included with Prisma)"
+print_success "No additional database software needed"
 
 # Install NetworkManager
 print_info "Installing NetworkManager..."

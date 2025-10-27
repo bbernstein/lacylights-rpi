@@ -27,10 +27,19 @@ git clone https://github.com/bbernstein/lacylights-rpi.git
 cd lacylights-rpi
 
 # Run complete setup (takes 15-20 minutes)
+# This clones the latest code from GitHub
 ./scripts/setup-new-pi.sh pi@raspberrypi.local
+
+# Or specify specific versions:
+./scripts/setup-new-pi.sh pi@raspberrypi.local \
+    --backend-version v1.1.0 \
+    --frontend-version v0.2.0 \
+    --mcp-version v1.0.0
 ```
 
 Then access your LacyLights at: **http://lacylights.local**
+
+**Note:** The setup script downloads release archives directly from GitHub to the Pi (no git repositories created), so you don't need to have them cloned locally.
 
 ### Deploying Updates
 
@@ -60,7 +69,7 @@ This repository provides:
 ### Setup Modules
 
 Modular setup scripts in `setup/`:
-- `01-system-setup.sh` - Install dependencies (Node.js, PostgreSQL, etc.)
+- `01-system-setup.sh` - Install dependencies (Node.js, NetworkManager, etc.)
 - `02-network-setup.sh` - Configure networking and hostname
 - `03-database-setup.sh` - Create database and user
 - `04-permissions-setup.sh` - Set up system user and permissions
@@ -71,6 +80,7 @@ Modular setup scripts in `setup/`:
 Diagnostic and maintenance tools in `utils/`:
 - **`check-health.sh`** - Comprehensive system health check
 - **`view-logs.sh`** - Easy log viewing with filtering
+- **`network-diagnostic.sh`** - Network connectivity troubleshooting
 - **`wifi-diagnostic.sh`** - WiFi troubleshooting and diagnostics
 
 ### Documentation
@@ -103,19 +113,22 @@ Complete guides in `docs/`:
 - macOS, Linux, or Windows with WSL
 - Git
 - SSH client
-- All LacyLights repositories cloned:
+- This repository cloned: [lacylights-rpi](https://github.com/bbernstein/lacylights-rpi)
+
+**For fresh installation:** Release archives are downloaded directly from GitHub to the Pi during setup (no git repositories).
+
+**For development workflow:** Clone the application repositories locally:
   - [lacylights-node](https://github.com/bbernstein/lacylights-node) (backend)
   - [lacylights-fe](https://github.com/bbernstein/lacylights-fe) (frontend)
   - [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) (MCP server)
-  - [lacylights-rpi](https://github.com/bbernstein/lacylights-rpi) (this repo)
 
-**Directory structure:**
+**Recommended directory structure for development:**
 ```
 ~/src/lacylights/
-├── lacylights-node/    # Backend repository
-├── lacylights-fe/      # Frontend repository
-├── lacylights-mcp/     # MCP server repository
-└── lacylights-rpi/     # This repository
+├── lacylights-node/    # Backend repository (for development)
+├── lacylights-fe/      # Frontend repository (for development)
+├── lacylights-mcp/     # MCP server repository (for development)
+└── lacylights-rpi/     # This repository (deployment tools)
 ```
 
 ## Repository Structure
@@ -135,7 +148,7 @@ lacylights-rpi/
 ├── setup/
 │   ├── 01-system-setup.sh           # Install system packages
 │   ├── 02-network-setup.sh          # Configure network
-│   ├── 03-database-setup.sh         # Setup PostgreSQL
+│   ├── 03-database-setup.sh         # Setup SQLite database
 │   ├── 04-permissions-setup.sh      # User and permissions
 │   └── 05-service-install.sh        # Install systemd service
 ├── utils/
@@ -185,9 +198,13 @@ ssh pi@lacylights.local '~/lacylights-setup/utils/view-logs.sh -n 100'
 ssh pi@lacylights.local '~/lacylights-setup/utils/view-logs.sh -e'
 ```
 
-### Check WiFi
+### Check Network
 
 ```bash
+# General network diagnostics
+ssh pi@lacylights.local '~/lacylights-setup/utils/network-diagnostic.sh'
+
+# WiFi-specific diagnostics
 ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'
 ```
 
@@ -199,29 +216,39 @@ ssh pi@lacylights.local 'sudo systemctl restart lacylights'
 
 ## Network Architecture
 
-LacyLights uses a dual-network setup:
+LacyLights uses an **intelligent dual-network setup** that automatically routes traffic appropriately:
 
-### Wired Network (eth0)
-- **Purpose:** DMX/Art-Net lighting control
+### Wired Network (eth0) - Local DMX Network
+- **Purpose:** DMX/Art-Net lighting control (local only)
 - **Configuration:** DHCP or static IP
 - **Broadcast:** Configurable in settings (e.g., 192.168.1.255)
 - **Usage:** Communication with DMX lighting fixtures
+- **Routing:** Low priority for internet (high metric = 200)
 
-### Wireless Network (wlan0)
+### Wireless Network (wlan0) - Internet Gateway
 - **Purpose:** External internet access
-- **Configuration:** Web interface or command line
-- **Usage:** AI model access (OpenAI, Claude), system updates
+- **Configuration:** Web interface or command line (any SSID)
+- **Usage:** AI model access (OpenAI, Claude), system updates, GitHub downloads
+- **Routing:** High priority for internet (low metric = 100)
 - **Setup:** See [WIFI_SETUP.md](docs/WIFI_SETUP.md)
 
-This dual setup keeps your lighting network isolated while providing internet connectivity.
+### Automatic Route Management
+
+The system automatically configures routing priorities:
+- **Internet traffic** → Always routes through WiFi (when connected)
+- **Local DMX traffic** → Always routes through Ethernet
+- **Works standalone** → Operates on local network without WiFi
+- **No hardcoding** → Works with any WiFi network configured by user
+
+This is handled by a NetworkManager dispatcher script that automatically sets route metrics whenever a network interface changes state.
 
 ## Environment Variables
 
 Key configuration in `/opt/lacylights/backend/.env`:
 
 ```bash
-# Database
-DATABASE_URL="postgresql://lacylights:password@localhost:5432/lacylights"
+# Database (SQLite)
+DATABASE_URL="file:./prisma/lacylights.db"
 
 # Server
 PORT=4000
@@ -337,9 +364,6 @@ ssh pi@lacylights.local 'sudo journalctl -u lacylights -n 50'
 
 # Common fixes
 ssh pi@lacylights.local << 'EOF'
-  # Ensure database is running
-  sudo systemctl start postgresql
-
   # Rebuild
   cd /opt/lacylights/backend
   npm run build
@@ -396,7 +420,7 @@ ssh-copy-id pi@lacylights.local
 ssh pi@lacylights.local
 
 # Backup database
-pg_dump -U lacylights lacylights > ~/lacylights-backup.sql
+cp /opt/lacylights/backend/prisma/lacylights.db ~/lacylights-backup.db
 
 # Backup config
 sudo cp /opt/lacylights/backend/.env ~/lacylights-config.backup
@@ -413,8 +437,10 @@ scp ./backups/lacylights-backup.sql pi@lacylights.local:~/
 
 # Restore
 ssh pi@lacylights.local
-psql -U lacylights lacylights < ~/lacylights-backup.sql
-sudo systemctl restart lacylights
+sudo systemctl stop lacylights
+cp ~/lacylights-backup.db /opt/lacylights/backend/prisma/lacylights.db
+sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
+sudo systemctl start lacylights
 ```
 
 ## Contributing
@@ -483,13 +509,14 @@ ssh pi@lacylights.local 'sudo reboot'                          # Reboot Pi
 ssh pi@lacylights.local 'sudo journalctl -u lacylights -f'     # Follow logs
 ssh pi@lacylights.local '~/lacylights-setup/utils/view-logs.sh -e'  # View errors
 
-# Health
-ssh pi@lacylights.local '~/lacylights-setup/utils/check-health.sh'  # Health check
-ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'  # WiFi check
+# Health & Diagnostics
+ssh pi@lacylights.local '~/lacylights-setup/utils/check-health.sh'       # Health check
+ssh pi@lacylights.local '~/lacylights-setup/utils/network-diagnostic.sh' # Network check
+ssh pi@lacylights.local '~/lacylights-setup/utils/wifi-diagnostic.sh'    # WiFi check
 
 # Database
-ssh pi@lacylights.local 'psql -U lacylights lacylights'        # Connect to DB
-ssh pi@lacylights.local 'pg_dump -U lacylights lacylights > backup.sql'  # Backup
+ssh pi@lacylights.local 'sqlite3 /opt/lacylights/backend/prisma/lacylights.db'  # Connect to DB
+ssh pi@lacylights.local 'cp /opt/lacylights/backend/prisma/lacylights.db ~/backup.db'  # Backup
 ```
 
 ---

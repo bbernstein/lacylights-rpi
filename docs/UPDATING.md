@@ -6,7 +6,7 @@ Guide for updating the LacyLights system, packages, and dependencies.
 
 1. **Application Updates** - New LacyLights features and fixes
 2. **System Updates** - Raspberry Pi OS patches and security updates
-3. **Dependency Updates** - Node.js, PostgreSQL, npm packages
+3. **Dependency Updates** - Node.js, npm packages
 4. **Firmware Updates** - Raspberry Pi firmware
 
 ## Application Updates
@@ -156,43 +156,6 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs
 ```
 
-### PostgreSQL Updates
-
-#### Minor Version Update
-
-```bash
-ssh pi@lacylights.local
-
-# Update PostgreSQL
-sudo apt-get update
-sudo apt-get upgrade postgresql
-
-# Restart PostgreSQL
-sudo systemctl restart postgresql
-
-# Restart LacyLights
-sudo systemctl restart lacylights
-```
-
-#### Major Version Upgrade
-
-Major PostgreSQL upgrades require data migration:
-
-```bash
-# Backup database first!
-pg_dump -U lacylights lacylights > ~/lacylights-backup.sql
-
-# Upgrade PostgreSQL
-sudo apt-get update
-sudo apt-get install postgresql-<new-version>
-
-# Follow PostgreSQL upgrade documentation
-# https://www.postgresql.org/docs/current/upgrading.html
-
-# Restore if needed
-psql -U lacylights lacylights < ~/lacylights-backup.sql
-```
-
 ### npm Package Updates
 
 #### Update Application Dependencies
@@ -263,13 +226,13 @@ Always backup before major updates:
 ssh pi@lacylights.local
 
 # Backup database
-pg_dump -U lacylights lacylights > ~/lacylights-db-$(date +%Y%m%d).sql
+cp /opt/lacylights/backend/prisma/lacylights.db ~/lacylights-db-$(date +%Y%m%d).db
 
 # Backup configuration
 sudo cp /opt/lacylights/backend/.env ~/lacylights-env-$(date +%Y%m%d).backup
 
 # Copy to local machine
-scp pi@lacylights.local:~/lacylights-*.{sql,backup} ./backups/
+scp pi@lacylights.local:~/lacylights-*.{db,backup} ./backups/
 ```
 
 ### Full System Backup
@@ -325,7 +288,6 @@ Recommended update frequency:
 | Security updates | Weekly | Low-usage times |
 | OS updates | Monthly | Scheduled downtime |
 | Node.js | Quarterly | When new LTS released |
-| PostgreSQL | Yearly | Major version releases |
 | Firmware | As needed | Only if required |
 
 ## Monitoring Updates
@@ -406,10 +368,13 @@ sudo nano /etc/apticron/apticron.conf
 3. Restore backup:
    ```bash
    # Restore database
-   psql -U lacylights lacylights < ~/lacylights-backup.sql
+   cp ~/lacylights-backup.db /opt/lacylights/backend/prisma/lacylights.db
 
    # Restore config
    sudo cp ~/lacylights-env.backup /opt/lacylights/backend/.env
+
+   # Fix permissions
+   sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
 
    # Restart
    sudo systemctl restart lacylights
@@ -435,12 +400,12 @@ sudo nano /etc/apticron/apticron.conf
 3. Reset if necessary (CAUTION: deletes data):
    ```bash
    # Backup first!
-   pg_dump -U lacylights lacylights > ~/backup-before-reset.sql
+   cp /opt/lacylights/backend/prisma/lacylights.db ~/backup-before-reset.db
 
    # Reset
    npx prisma migrate reset --force
 
-   # Restore data if needed
+   # Restore data if needed (copy backup back)
    ```
 
 ### Dependency Conflicts
@@ -502,8 +467,10 @@ sudo apt-mark hold <package>
 ```bash
 # Restore from backup
 ssh pi@lacylights.local
-psql -U lacylights lacylights < ~/lacylights-backup.sql
-sudo systemctl restart lacylights
+sudo systemctl stop lacylights
+cp ~/lacylights-backup.db /opt/lacylights/backend/prisma/lacylights.db
+sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
+sudo systemctl start lacylights
 ```
 
 ## Best Practices

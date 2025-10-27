@@ -14,11 +14,9 @@ This guide walks you through setting up LacyLights on a fresh Raspberry Pi from 
 ### Software
 - **Raspberry Pi OS** (64-bit, Lite or Desktop)
 - **Development machine** (macOS, Linux, or Windows with WSL)
-- All LacyLights repositories cloned locally:
-  - `lacylights-node` (backend)
-  - `lacylights-fe` (frontend)
-  - `lacylights-mcp` (MCP server)
-  - `lacylights-rpi` (deployment tools)
+- **lacylights-rpi** repository cloned locally (deployment tools)
+
+**Note:** Other repositories (backend, frontend, MCP) are cloned directly from GitHub to the Pi during setup.
 
 ### Network
 - Local network with DHCP
@@ -31,18 +29,28 @@ For a fresh Raspberry Pi with SSH enabled:
 
 ```bash
 cd lacylights-rpi
+
+# Setup with latest code from GitHub
 ./scripts/setup-new-pi.sh pi@raspberrypi.local
+
+# Or specify specific versions:
+./scripts/setup-new-pi.sh pi@raspberrypi.local \
+    --backend-version v1.1.0 \
+    --frontend-version v0.2.0 \
+    --mcp-version v1.0.0
 ```
 
 This one command will:
 1. Install all system dependencies
 2. Configure networking and hostname
-3. Set up PostgreSQL database
+3. Set up SQLite database directory
 4. Create system user and permissions
-5. Deploy all application code
+5. Download all application release archives from GitHub
 6. Build and start services
 
 **Setup time:** 15-20 minutes
+
+**Note:** Release archives are downloaded directly from GitHub to the Pi (no git repositories), so you don't need them locally.
 
 ## Detailed Setup Process
 
@@ -149,9 +157,10 @@ sudo bash 01-system-setup.sh
 
 This installs:
 - Node.js 20
-- PostgreSQL
 - NetworkManager
 - Build tools
+
+**Note:** SQLite is included with Prisma, no separate database installation needed.
 
 ### 2. Network Configuration
 
@@ -176,11 +185,12 @@ sudo bash 03-database-setup.sh
 ```
 
 This:
-- Creates `lacylights` database
-- Creates `lacylights` user with random password
-- Grants necessary privileges
+- Creates database directory at `/opt/lacylights/backend/prisma/`
+- Saves SQLite connection string
 
 The database connection string is saved to `/tmp/lacylights-setup/database.env`
+
+**Note:** The SQLite database file will be created automatically when migrations run.
 
 ### 4. Permissions Setup
 
@@ -193,21 +203,50 @@ This:
 - Creates `/opt/lacylights/` directories
 - Installs sudoers file for WiFi management
 
-### 5. Deploy Application Code
+### 5. Download Application Code
 
-From your development machine:
-
-```bash
-cd lacylights-rpi
-./scripts/deploy.sh
-```
-
-### 6. Run Database Migrations
+Release archives are downloaded from GitHub on the Pi:
 
 ```bash
 ssh pi@lacylights.local
+
+# Download and extract releases manually (usually done by setup script):
+cd /tmp
+curl -L https://github.com/bbernstein/lacylights-node/archive/refs/tags/v1.1.0.tar.gz | tar -xz
+mv lacylights-node-* /opt/lacylights/backend
+
+curl -L https://github.com/bbernstein/lacylights-fe/archive/refs/tags/v0.2.0.tar.gz | tar -xz
+mv lacylights-fe-* /opt/lacylights/frontend-src
+
+curl -L https://github.com/bbernstein/lacylights-mcp/archive/refs/tags/v1.0.0.tar.gz | tar -xz
+mv lacylights-mcp-* /opt/lacylights/mcp
+
+# Or for main branch:
+# curl -L https://github.com/bbernstein/lacylights-node/archive/refs/heads/main.tar.gz | tar -xz
+```
+
+### 6. Build Projects
+
+```bash
+ssh pi@lacylights.local
+
+# Build backend
 cd /opt/lacylights/backend
+npm install
+npm run build
+
+# Run database migrations
 npx prisma migrate deploy
+
+# Build frontend
+cd /opt/lacylights/frontend-src
+npm install
+npm run build
+
+# Build MCP server
+cd /opt/lacylights/mcp
+npm install
+npm run build
 ```
 
 ### 7. Install and Start Service
@@ -220,19 +259,27 @@ sudo systemctl start lacylights
 
 ## Network Configuration
 
-### Dual Network Setup
+### Dual Network Setup with Automatic Routing
 
-LacyLights uses two network interfaces:
+LacyLights uses an intelligent dual-network configuration:
 
-1. **Ethernet (eth0)** - DMX/Art-Net lighting network
+1. **Ethernet (eth0)** - Local DMX/Art-Net lighting network
    - Connect to DMX lighting fixtures
    - Configure broadcast address in settings
    - Example: 192.168.1.255 for 192.168.1.x network
+   - **Routing:** Automatically configured for local traffic only
 
-2. **WiFi (wlan0)** - External internet access
-   - Connect to your local WiFi for internet
+2. **WiFi (wlan0)** - External internet access (optional)
+   - Connect to any WiFi network via web interface
    - Used by MCP server to reach AI models
-   - Configured via web interface
+   - Used for system updates and GitHub access
+   - **Routing:** Automatically becomes primary internet gateway when connected
+
+The setup script automatically configures route priorities so:
+- Internet traffic routes through WiFi (when available)
+- Local DMX traffic routes through Ethernet
+- Device works standalone without WiFi
+- No SSID hardcoding - works with any user-configured WiFi network
 
 ### Setting Up WiFi
 
@@ -302,7 +349,7 @@ ssh pi@lacylights.local
 sudo cat /opt/lacylights/backend/.env > ~/lacylights-backup.env
 
 # Database
-pg_dump -U lacylights lacylights > ~/lacylights-backup.sql
+cp /opt/lacylights/backend/prisma/lacylights.db ~/lacylights-backup.db
 ```
 
 Copy to your local machine:
@@ -322,10 +369,12 @@ sudo cp ~/lacylights-backup.env /opt/lacylights/backend/.env
 sudo chown lacylights:lacylights /opt/lacylights/backend/.env
 
 # Restore database
-psql -U lacylights lacylights < ~/lacylights-backup.sql
+sudo systemctl stop lacylights
+cp ~/lacylights-backup.db /opt/lacylights/backend/prisma/lacylights.db
+sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
 
 # Restart service
-sudo systemctl restart lacylights
+sudo systemctl start lacylights
 ```
 
 ## Troubleshooting
@@ -381,9 +430,9 @@ sudo systemctl restart lacylights
    ```
 
 2. Common issues:
-   - Database not running: `sudo systemctl start postgresql`
    - Missing .env file: `sudo cp /opt/lacylights/backend/.env.example /opt/lacylights/backend/.env`
    - Port already in use: `sudo netstat -tlnp | grep 4000`
+   - Database file missing: `cd /opt/lacylights/backend && npx prisma migrate deploy`
 
 3. Try manual start for details:
    ```bash
@@ -396,24 +445,26 @@ sudo systemctl restart lacylights
 **Problem:** Cannot connect to database
 
 **Solutions:**
-1. Check PostgreSQL is running:
+1. Check database file exists:
    ```bash
-   sudo systemctl status postgresql
+   ls -la /opt/lacylights/backend/prisma/lacylights.db
    ```
 
-2. Verify database exists:
-   ```bash
-   sudo -u postgres psql -l | grep lacylights
-   ```
-
-3. Check connection string in .env:
+2. Check connection string in .env:
    ```bash
    sudo grep DATABASE_URL /opt/lacylights/backend/.env
    ```
 
-4. Test connection:
+3. Verify file permissions:
    ```bash
-   psql "postgresql://lacylights:password@localhost:5432/lacylights"
+   sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
+   sudo chmod 644 /opt/lacylights/backend/prisma/lacylights.db
+   ```
+
+4. Re-run migrations if database is missing:
+   ```bash
+   cd /opt/lacylights/backend
+   npx prisma migrate deploy
    ```
 
 ### Out of Disk Space
@@ -453,22 +504,13 @@ Default settings should work well. If you experience issues:
    sudo dphys-swapfile swapon
    ```
 
-2. **Optimize PostgreSQL:**
-   ```bash
-   sudo nano /etc/postgresql/*/main/postgresql.conf
-   # Add:
-   # shared_buffers = 128MB
-   # max_connections = 20
-   sudo systemctl restart postgresql
-   ```
-
 ### For Raspberry Pi 3
 
 May require adjustments:
 
 1. Reduce memory limits in systemd service
-2. Use SQLite instead of PostgreSQL (requires code changes)
-3. Disable MCP server if not needed
+2. Disable MCP server if not needed
+3. Consider reducing Art-Net refresh rate
 
 ## Next Steps
 
