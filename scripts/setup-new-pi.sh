@@ -396,8 +396,16 @@ print_info "Fixing file permissions..."
 ssh "$PI_HOST" "sudo chown -R lacylights:lacylights /opt/lacylights"
 print_success "Permissions fixed"
 
+# Install and configure nginx
+print_header "Step 11: Installing Nginx"
+print_info "Installing and configuring nginx..."
+
+ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 06-nginx-setup.sh"
+
+print_success "Nginx installed and configured"
+
 # Start service
-print_header "Step 11: Starting Service"
+print_header "Step 12: Starting Service"
 print_info "Starting LacyLights service..."
 
 ssh "$PI_HOST" "sudo systemctl start lacylights"
@@ -418,7 +426,7 @@ else
 fi
 
 # Health check
-print_header "Step 10: Health Check"
+print_header "Step 13: Health Check"
 print_info "Checking service health..."
 
 sleep 2
