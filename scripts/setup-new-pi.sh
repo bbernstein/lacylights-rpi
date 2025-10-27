@@ -322,7 +322,7 @@ set -e
 
 echo "[INFO] Building backend..."
 cd /opt/lacylights/backend
-npm install --production
+npm install
 npm run build
 
 echo "[INFO] Running database migrations..."
@@ -330,13 +330,13 @@ npx prisma migrate deploy
 
 echo "[INFO] Building frontend..."
 cd /opt/lacylights/frontend-src
-npm install --production
+npm install
 npm run build
 
 if [ -d /opt/lacylights/mcp ]; then
     echo "[INFO] Building MCP server..."
     cd /opt/lacylights/mcp
-    npm install --production
+    npm install
     npm run build
 fi
 
