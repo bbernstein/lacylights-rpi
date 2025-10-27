@@ -38,9 +38,8 @@ configure_routes() {
             if [ -n "$CONNECTION" ]; then
                 nmcli connection modify "$CONNECTION" ipv4.route-metric 100
                 nmcli connection modify "$CONNECTION" ipv6.route-metric 100
-                # Restart connection to apply metric
-                nmcli connection down "$CONNECTION" 2>/dev/null
-                nmcli connection up "$CONNECTION" 2>/dev/null
+                # Reload connection to apply metric without interruption
+                nmcli connection reload "$CONNECTION"
             fi
             ;;
     esac

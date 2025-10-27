@@ -285,7 +285,7 @@ download_release() {
     echo "[INFO] Downloading \$repo_name version \$version..."
 
     # Determine if version is a tag or branch
-    if [[ "\$version" =~ ^v[0-9] ]]; then
+    if [[ "\$version" =~ ^v[0-9]+ ]]; then
         # It's a tag
         url="https://github.com/\$repo/archive/refs/tags/\${version}.tar.gz"
     else
