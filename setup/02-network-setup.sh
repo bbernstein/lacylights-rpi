@@ -2,6 +2,12 @@
 
 # LacyLights Network Setup
 # Configures NetworkManager and hostname
+#
+# Usage:
+#   sudo bash 02-network-setup.sh [hostname]
+#
+# Arguments:
+#   hostname    Optional hostname to set (default: lacylights)
 
 set -e
 
@@ -33,19 +39,23 @@ print_header() {
 
 print_header "LacyLights Network Setup"
 
+# Get desired hostname from argument or default to lacylights
+DESIRED_HOSTNAME="${1:-lacylights}"
+print_info "Target hostname: $DESIRED_HOSTNAME"
+
 # Set hostname
-print_info "Setting hostname to lacylights..."
+print_info "Setting hostname to $DESIRED_HOSTNAME..."
 
 CURRENT_HOSTNAME=$(hostname)
-if [ "$CURRENT_HOSTNAME" == "lacylights" ]; then
-    print_success "Hostname already set to lacylights"
+if [ "$CURRENT_HOSTNAME" == "$DESIRED_HOSTNAME" ]; then
+    print_success "Hostname already set to $DESIRED_HOSTNAME"
 else
-    sudo hostnamectl set-hostname lacylights
+    sudo hostnamectl set-hostname "$DESIRED_HOSTNAME"
 
     # Update /etc/hosts
-    sudo sed -i "s/$CURRENT_HOSTNAME/lacylights/g" /etc/hosts
+    sudo sed -i "s/$CURRENT_HOSTNAME/$DESIRED_HOSTNAME/g" /etc/hosts
 
-    print_success "Hostname changed from $CURRENT_HOSTNAME to lacylights"
+    print_success "Hostname changed from $CURRENT_HOSTNAME to $DESIRED_HOSTNAME"
     print_info "Reboot required for hostname change to take full effect"
 fi
 
