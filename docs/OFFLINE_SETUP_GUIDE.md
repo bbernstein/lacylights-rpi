@@ -67,11 +67,15 @@ Create a "golden image" with all dependencies pre-installed:
 1. Complete Option A above
 2. Create an image backup:
 
-   **⚠️ Warning:** Verify `/dev/sdX` is the correct SD card device using `lsblk` before running this command. Using the wrong device can cause data loss.
+   **⚠️ DANGER:** Replace `/dev/YOUR_SD_CARD` with the actual device path of your SD card (e.g., `/dev/sdb`). Use `lsblk` to identify the correct device. Using the wrong device can cause **irreversible data loss** to your computer.
 
    ```bash
    # On your Mac/PC
-   sudo dd if=/dev/sdX of=lacylights-prepared.img bs=4M status=progress
+   # First, identify your SD card device:
+   lsblk
+
+   # Then create the image (replace YOUR_SD_CARD with actual device like sdb):
+   sudo dd if=/dev/YOUR_SD_CARD of=lacylights-prepared.img bs=4M status=progress
    ```
 3. Use this image for all future Pi installations
 

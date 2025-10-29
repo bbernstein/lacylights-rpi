@@ -517,7 +517,20 @@ print_header "Step 4: Network Setup"
 print_info "Configuring network and hostname..."
 
 # Extract hostname from PI_HOST (e.g., pi@ntclights.local -> ntclights)
-PI_HOSTNAME=$(echo "$PI_HOST" | cut -d'@' -f2 | cut -d'.' -f1)
+# Handle IP addresses separately to avoid breaking them
+PI_HOST_PART=$(echo "$PI_HOST" | cut -d'@' -f2)
+
+# Check if it's an IP address (contains only digits and dots)
+if [[ "$PI_HOST_PART" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    # It's an IP address - use it as-is, don't strip dots or add .local
+    PI_HOSTNAME="$PI_HOST_PART"
+    IS_IP_ADDRESS=true
+else
+    # It's a hostname - strip .local suffix if present
+    PI_HOSTNAME=$(echo "$PI_HOST_PART" | sed 's/\.local$//')
+    IS_IP_ADDRESS=false
+fi
+
 CURRENT_HOSTNAME=$(ssh "$PI_HOST" "hostname")
 
 if [ "$CURRENT_HOSTNAME" != "$PI_HOSTNAME" ]; then
@@ -533,17 +546,26 @@ if [ "$CURRENT_HOSTNAME" != "$PI_HOSTNAME" ]; then
     sleep 10
 
     # Try to reconnect with new hostname
-    print_info "Attempting to reconnect to $PI_HOSTNAME.local..."
+    if [ "$IS_IP_ADDRESS" = true ]; then
+        # For IP addresses, reconnect to the same IP
+        print_info "Attempting to reconnect to $PI_HOSTNAME..."
+        RECONNECT_HOST="$PI_HOSTNAME"
+    else
+        # For hostnames, use .local suffix for mDNS
+        print_info "Attempting to reconnect to $PI_HOSTNAME.local..."
+        RECONNECT_HOST="$PI_HOSTNAME.local"
+    fi
+
     MAX_RETRIES=6
     RETRY_COUNT=0
     RECONNECTED=false
 
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-        if ssh -o ConnectTimeout=5 -o BatchMode=yes "$PI_USER@$PI_HOSTNAME.local" "exit" 2>/dev/null; then
+        if ssh -o ConnectTimeout=5 -o BatchMode=yes "$PI_USER@$RECONNECT_HOST" "exit" 2>/dev/null; then
             RECONNECTED=true
-            print_success "✅ Reconnected to $PI_HOSTNAME.local"
+            print_success "✅ Reconnected to $RECONNECT_HOST"
             # Update PI_HOST for remaining steps
-            PI_HOST="$PI_USER@$PI_HOSTNAME.local"
+            PI_HOST="$PI_USER@$RECONNECT_HOST"
             break
         fi
 
@@ -778,16 +800,21 @@ extract_with_progress() {
     # Check if pv is available for progress bar
     if command -v pv &> /dev/null; then
         pv "$tarfile" | tar $TAR_OPTS
-        PIPE_STATUS=( "${PIPESTATUS[@]}" )
-        if [ "${PIPE_STATUS[0]}" -ne 0 ] || [ "${PIPE_STATUS[1]}" -ne 0 ]; then
+        # Capture pipe statuses immediately (must not run any commands before this)
+        EXTRACT_STATUS=( "${PIPESTATUS[@]}" )
+        if [ "${EXTRACT_STATUS[0]}" -ne 0 ] || [ "${EXTRACT_STATUS[1]}" -ne 0 ]; then
             echo "[ERROR] Failed to extract $tarfile"
             return 1
         fi
     else
         # Extract with verbose error output
+        # Filter out harmless extended header warnings
         tar -f "$tarfile" $TAR_OPTS 2>&1 | \
-            grep -v "Ignoring unknown extended header keyword" || true
-        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            grep -v "Ignoring unknown extended header keyword"
+        # Capture pipe statuses immediately (must not run any commands before this)
+        EXTRACT_STATUS=( "${PIPESTATUS[@]}" )
+        # Check tar's exit status (grep failure is OK if no warnings to filter)
+        if [ "${EXTRACT_STATUS[0]}" -ne 0 ]; then
             echo "[ERROR] Failed to extract $tarfile"
             return 1
         fi

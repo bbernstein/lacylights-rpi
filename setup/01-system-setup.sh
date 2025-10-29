@@ -81,7 +81,21 @@ print_info "Checking Node.js..."
 # Check if Node.js is already installed
 if command -v node &> /dev/null; then
     NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-    if [ -n "$NODE_VERSION" ] && [[ "$NODE_VERSION" =~ ^[0-9]+$ ]] && [ "$NODE_VERSION" -ge 18 ]; then
+
+    # Check if version parsing succeeded and is numeric
+    if [ -z "$NODE_VERSION" ] || ! [[ "$NODE_VERSION" =~ ^[0-9]+$ ]]; then
+        print_error "Failed to parse Node.js version from output: $(node -v)"
+        print_error "Expected numeric version, got: '$NODE_VERSION'"
+        if [ "$OFFLINE_MODE" = true ]; then
+            print_error "OFFLINE MODE: Cannot reinstall Node.js without internet"
+            exit 1
+        else
+            print_info "Reinstalling Node.js 20..."
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            print_success "Node.js installed: $(node -v)"
+        fi
+    elif [ "$NODE_VERSION" -ge 18 ]; then
         print_success "Node.js $NODE_VERSION already installed ($(node -v))"
 
         # Check if npm is available
@@ -103,8 +117,8 @@ if command -v node &> /dev/null; then
             fi
         fi
     else
+        print_error "Node.js version $NODE_VERSION is too old (need 18+). Full version: $(node -v)"
         if [ "$OFFLINE_MODE" = true ]; then
-            print_error "Node.js version $NODE_VERSION is too old (need 18+)"
             print_error "OFFLINE MODE: Cannot upgrade Node.js without internet"
             print_error "Please install Node.js 18+ manually or run setup with internet access"
             exit 1

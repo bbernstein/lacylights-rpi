@@ -246,7 +246,7 @@ if [ "$IS_OPEN" = true ]; then
     # Open network (no password)
     print_info "Connecting to open network..."
     # Set route metrics during creation for high priority internet routing
-    # Metric 50 ensures WiFi is preferred over Ethernet (typically metric 100)
+    # Lower metric = higher priority: metric 50 gives WiFi higher priority than Ethernet (typically metric 100)
     if sudo nmcli connection add type wifi con-name "$CONNECTION_NAME" ifname "$WIFI_DEVICE" ssid "$WIFI_SSID" \
             ipv4.route-metric 50 ipv6.route-metric 50 && \
        sudo nmcli connection up "$CONNECTION_NAME"; then
@@ -270,7 +270,7 @@ else
 
     # Create the connection with explicit security settings AND route metrics
     # Setting metrics during creation ensures they're active immediately
-    # Metric 50 ensures WiFi is preferred over Ethernet (typically metric 100)
+    # Lower metric = higher priority: metric 50 gives WiFi higher priority than Ethernet (typically metric 100)
     if sudo nmcli connection add type wifi con-name "$CONNECTION_NAME" ifname "$WIFI_DEVICE" ssid "$WIFI_SSID" \
             wifi-sec.key-mgmt "$KEY_MGMT" wifi-sec.psk "$WIFI_PASSWORD" \
             ipv4.route-metric 50 ipv6.route-metric 50; then
