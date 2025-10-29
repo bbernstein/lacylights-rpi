@@ -269,23 +269,23 @@ HAS_INTERNET=$(ssh "$PI_HOST" "ping -c 1 -W 2 8.8.8.8 > /dev/null 2>&1 && echo '
 
 if [ "$HAS_NODEJS" = "yes" ]; then
     NODE_VERSION=$(ssh "$PI_HOST" "node -v")
-    print_success "✅ Node.js is installed: $NODE_VERSION"
+    print_success "[OK] Node.js is installed: $NODE_VERSION"
 else
-    print_warning "❌ Node.js is not installed"
+    print_warning "[FAIL] Node.js is not installed"
 fi
 
 if [ "$HAS_NPM" = "yes" ]; then
     # Try to get npm version, checking multiple locations
     NPM_VERSION=$(ssh "$PI_HOST" "npm -v 2>/dev/null || /usr/bin/npm -v 2>/dev/null || /usr/local/bin/npm -v 2>/dev/null || echo 'unknown'")
-    print_success "✅ npm is installed: v$NPM_VERSION"
+    print_success "[OK] npm is installed: v$NPM_VERSION"
 else
-    print_warning "❌ npm is not installed"
+    print_warning "[FAIL] npm is not installed"
 fi
 
 if [ "$HAS_INTERNET" = "yes" ]; then
-    print_success "✅ Pi has internet access"
+    print_success "[OK] Pi has internet access"
 else
-    print_warning "❌ Pi does not have internet access"
+    print_warning "[FAIL] Pi does not have internet access"
 fi
 
 # For offline mode, Node.js and npm are hard requirements
@@ -295,7 +295,7 @@ if [ -n "$OFFLINE_BUNDLE" ]; then
         # Check if we can get internet to install missing packages
         if [ "$HAS_INTERNET" = "no" ]; then
             print_warning ""
-            print_warning "⚠️  OFFLINE MODE: Required packages missing on Raspberry Pi"
+            print_warning "[WARN] OFFLINE MODE: Required packages missing on Raspberry Pi"
             print_warning ""
 
             if [ "$HAS_NODEJS" = "no" ]; then
@@ -361,11 +361,11 @@ if [ "$SKIP_WIFI" = false ] || [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ]; then
             ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && bash 00-wifi-setup.sh '$WIFI_SSID' '$WIFI_PASSWORD' true" || WIFI_SETUP_RESULT=$?
 
             if [ $WIFI_SETUP_RESULT -eq 0 ]; then
-                print_success "✅ WiFi configured successfully"
+                print_success "[OK] WiFi configured successfully"
                 print_success "Pi now has internet access"
                 HAS_INTERNET="yes"
             else
-                print_error "❌ WiFi configuration failed"
+                print_error "[FAIL] WiFi configuration failed"
 
                 if [ "$HAS_NODEJS" = "no" ]; then
                     print_error "Cannot continue without Node.js and internet access"
@@ -415,11 +415,11 @@ if [ "$SKIP_WIFI" = false ] || [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ]; then
                 ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && bash 00-wifi-setup.sh" || WIFI_SETUP_RESULT=$?
 
                 if [ $WIFI_SETUP_RESULT -eq 0 ]; then
-                    print_success "✅ WiFi configured successfully"
+                    print_success "[OK] WiFi configured successfully"
                     print_success "Pi now has internet access"
                     HAS_INTERNET="yes"
                 else
-                    print_error "❌ WiFi configuration failed"
+                    print_error "[FAIL] WiFi configuration failed"
 
                     if [ "$WIFI_REQUIRED" = true ]; then
                         print_error "Cannot continue without internet access"
@@ -458,7 +458,7 @@ fi
 # Final check: if offline mode needs WiFi and we still don't have it, fail now
 if [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ] && [ "$HAS_INTERNET" != "yes" ]; then
     print_error ""
-    print_error "❌ Cannot continue offline deployment without internet access"
+    print_error "[FAIL] Cannot continue offline deployment without internet access"
     print_error ""
     print_error "WiFi configuration was not completed successfully."
     print_error "Node.js and npm cannot be installed without internet."
@@ -499,9 +499,9 @@ HAS_NPM=$(ssh "$PI_HOST" "command -v npm &> /dev/null && echo 'yes' || echo 'no'
 if [ "$HAS_NODEJS" = "yes" ] && [ "$HAS_NPM" = "yes" ]; then
     NODE_VERSION=$(ssh "$PI_HOST" "node -v")
     NPM_VERSION=$(ssh "$PI_HOST" "npm -v")
-    print_success "✅ Node.js $NODE_VERSION and npm v$NPM_VERSION are ready"
+    print_success "[OK] Node.js $NODE_VERSION and npm v$NPM_VERSION are ready"
 else
-    print_error "❌ Node.js or npm installation failed"
+    print_error "[FAIL] Node.js or npm installation failed"
     if [ "$HAS_NODEJS" = "no" ]; then
         print_error "   Node.js is still not available"
     fi
@@ -563,7 +563,7 @@ if [ "$CURRENT_HOSTNAME" != "$PI_HOSTNAME" ]; then
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         if ssh -o ConnectTimeout=5 -o BatchMode=yes "$PI_USER@$RECONNECT_HOST" "exit" 2>/dev/null; then
             RECONNECTED=true
-            print_success "✅ Reconnected to $RECONNECT_HOST"
+            print_success "[OK] Reconnected to $RECONNECT_HOST"
             # Update PI_HOST for remaining steps
             PI_HOST="$PI_USER@$RECONNECT_HOST"
             break
@@ -788,18 +788,18 @@ extract_with_progress() {
         return 1
     fi
 
-    # Build tar options
-    TAR_OPTS="-xz"
+    # Build tar options as array to avoid word splitting issues
+    local TAR_OPTS=("-xz")
     if [ -n "$dest" ]; then
-        TAR_OPTS="$TAR_OPTS -C $dest"
+        TAR_OPTS+=("-C" "$dest")
         if [ "$strip_components" != "0" ]; then
-            TAR_OPTS="$TAR_OPTS --strip-components=$strip_components"
+            TAR_OPTS+=("--strip-components=$strip_components")
         fi
     fi
 
     # Check if pv is available for progress bar
     if command -v pv &> /dev/null; then
-        pv "$tarfile" | tar $TAR_OPTS
+        pv "$tarfile" | tar "${TAR_OPTS[@]}"
         # Capture pipe statuses immediately (must not run any commands before this)
         EXTRACT_STATUS=( "${PIPESTATUS[@]}" )
         if [ "${EXTRACT_STATUS[0]}" -ne 0 ] || [ "${EXTRACT_STATUS[1]}" -ne 0 ]; then
@@ -809,7 +809,7 @@ extract_with_progress() {
     else
         # Extract with verbose error output
         # Filter out harmless extended header warnings
-        tar -f "$tarfile" $TAR_OPTS 2>&1 | \
+        tar -f "$tarfile" "${TAR_OPTS[@]}" 2>&1 | \
             grep -v "Ignoring unknown extended header keyword"
         # Capture pipe statuses immediately (must not run any commands before this)
         EXTRACT_STATUS=( "${PIPESTATUS[@]}" )
@@ -1126,9 +1126,9 @@ sleep 2
 HEALTH_CHECK=$(ssh "$PI_HOST" "curl -s -f http://localhost:4000/graphql -H 'Content-Type: application/json' -d '{\"query\": \"{ __typename }\"}'" 2>/dev/null || echo "")
 
 if echo "$HEALTH_CHECK" | grep -q "Query"; then
-    print_success "✅ GraphQL endpoint is responding"
+    print_success "[OK] GraphQL endpoint is responding"
 else
-    print_warning "⚠️  GraphQL endpoint may not be responding correctly"
+    print_warning "[WARN]  GraphQL endpoint may not be responding correctly"
 fi
 
 # Final success message

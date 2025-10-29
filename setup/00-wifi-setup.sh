@@ -319,7 +319,7 @@ while [ $WAITED -lt $MAX_WAIT ]; do
 
     if [ -n "$IP_ADDR" ] && [[ "$IP_ADDR" != 169.254.* ]]; then
         HAS_IP=true
-        print_success "✅ IP address assigned: $IP_ADDR"
+        print_success "[OK] IP address assigned: $IP_ADDR"
         break
     fi
 
@@ -328,7 +328,7 @@ while [ $WAITED -lt $MAX_WAIT ]; do
 done
 
 if [ "$HAS_IP" = false ]; then
-    print_error "❌ Failed to obtain IP address"
+    print_error "[FAIL] Failed to obtain IP address"
     print_error "DHCP may not be working on this network"
     exit 1
 fi
@@ -340,9 +340,9 @@ sleep 3
 # Check if we have a default route via WiFi
 print_info "Checking default route..."
 if ip route | grep -q "^default.*$WIFI_DEVICE"; then
-    print_success "✅ Default route configured via WiFi"
+    print_success "[OK] Default route configured via WiFi"
 else
-    print_warning "⚠️  No default route via WiFi (may still work via Ethernet)"
+    print_warning "[WARN] No default route via WiFi (may still work via Ethernet)"
 fi
 
 # Verify internet connectivity
@@ -350,17 +350,17 @@ print_info "Verifying internet connectivity..."
 
 # Try ping to 8.8.8.8 with a reasonable timeout
 if ping -c 2 -W 3 8.8.8.8 > /dev/null 2>&1; then
-    print_success "✅ Internet connectivity verified"
+    print_success "[OK] Internet connectivity verified"
 
     # Test DNS resolution
     sleep 1
     if ping -c 1 -W 5 github.com > /dev/null 2>&1; then
-        print_success "✅ DNS resolution working"
+        print_success "[OK] DNS resolution working"
     else
-        print_warning "⚠️  DNS resolution may not be working"
+        print_warning "[WARN] DNS resolution may not be working"
     fi
 else
-    print_error "❌ No internet connectivity"
+    print_error "[FAIL] No internet connectivity"
     print_error "WiFi connected but cannot reach internet"
     print_info ""
     print_info "Diagnostic information:"
@@ -380,9 +380,9 @@ else
     if [ -n "$GATEWAY" ]; then
         print_info "Testing connection to gateway ($GATEWAY)..."
         if ping -c 1 -W 2 "$GATEWAY" > /dev/null 2>&1; then
-            print_info "✅ Can reach gateway - DNS or external routing issue"
+            print_info "[OK] Can reach gateway - DNS or external routing issue"
         else
-            print_error "❌ Cannot reach gateway - WiFi authentication may be required"
+            print_error "[FAIL] Cannot reach gateway - WiFi authentication may be required"
         fi
     fi
 

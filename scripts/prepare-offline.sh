@@ -47,18 +47,57 @@ fi
 archive_with_fallback() {
     local output_file="$1"
     local source_dir="$2"
-    local extra_flags="$3"  # Optional extra flags like "-C dir"
+    local change_dir="$3"  # Optional: directory to change to before archiving
+
+    # Build tar command as array to avoid word splitting issues
+    local tar_cmd=()
 
     # Disable macOS extended attributes to avoid warnings on Linux
     if [ "$TAR_TYPE" = "bsd" ]; then
-        # BSD tar (macOS) - use --no-mac-metadata if available
-        COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$output_file" $extra_flags "$source_dir" 2>/dev/null || \
-        COPYFILE_DISABLE=1 tar --no-xattrs -czf "$output_file" $extra_flags "$source_dir" 2>/dev/null || \
-        COPYFILE_DISABLE=1 tar -czf "$output_file" $extra_flags "$source_dir"
+        # BSD tar (macOS) - try flags in order of preference
+        tar_cmd=(tar --no-xattrs --no-mac-metadata -czf "$output_file")
+        if [ -n "$change_dir" ]; then
+            tar_cmd+=(-C "$change_dir")
+        fi
+        tar_cmd+=("$source_dir")
+
+        COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null || \
+        {
+            # Fallback: without --no-mac-metadata
+            tar_cmd=(tar --no-xattrs -czf "$output_file")
+            if [ -n "$change_dir" ]; then
+                tar_cmd+=(-C "$change_dir")
+            fi
+            tar_cmd+=("$source_dir")
+            COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null
+        } || \
+        {
+            # Fallback: basic tar
+            tar_cmd=(tar -czf "$output_file")
+            if [ -n "$change_dir" ]; then
+                tar_cmd+=(-C "$change_dir")
+            fi
+            tar_cmd+=("$source_dir")
+            COPYFILE_DISABLE=1 "${tar_cmd[@]}"
+        }
     else
         # GNU tar or unknown tar
-        COPYFILE_DISABLE=1 tar --no-xattrs -czf "$output_file" $extra_flags "$source_dir" 2>/dev/null || \
-        COPYFILE_DISABLE=1 tar -czf "$output_file" $extra_flags "$source_dir"
+        tar_cmd=(tar --no-xattrs -czf "$output_file")
+        if [ -n "$change_dir" ]; then
+            tar_cmd+=(-C "$change_dir")
+        fi
+        tar_cmd+=("$source_dir")
+
+        COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null || \
+        {
+            # Fallback: basic tar
+            tar_cmd=(tar -czf "$output_file")
+            if [ -n "$change_dir" ]; then
+                tar_cmd+=(-C "$change_dir")
+            fi
+            tar_cmd+=("$source_dir")
+            COPYFILE_DISABLE=1 "${tar_cmd[@]}"
+        }
     fi
 }
 
@@ -304,7 +343,7 @@ if [ -n "$OLD_BUNDLES" ]; then
 fi
 
 # Create portable archive with all bundle contents
-archive_with_fallback "$BUNDLE_PATH" "." "-C $OUTPUT_DIR"
+archive_with_fallback "$BUNDLE_PATH" "." "$OUTPUT_DIR"
 
 print_success "Bundle archive created: $BUNDLE_PATH"
 
