@@ -195,7 +195,8 @@ fi
 print_header "Verifying Hostname Configuration"
 
 # Extract desired hostname from PI_HOST (e.g., pi@ntclights.local -> ntclights)
-DESIRED_HOSTNAME=$(echo "$PI_HOSTNAME" | cut -d'.' -f1)
+# Strip .local suffix first, then take first component (for multi-dot hostnames)
+DESIRED_HOSTNAME=$(echo "$PI_HOSTNAME" | sed 's/\.local$//' | cut -d'.' -f1)
 print_info "Expected hostname: $DESIRED_HOSTNAME"
 
 # Get current hostname from Pi

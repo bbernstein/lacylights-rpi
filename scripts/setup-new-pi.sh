@@ -521,13 +521,15 @@ print_info "Configuring network and hostname..."
 PI_HOST_PART=$(echo "$PI_HOST" | cut -d'@' -f2)
 
 # Check if it's an IP address (contains only digits and dots)
+# Note: This doesn't validate octet ranges (0-255), but accepts the pattern
+# Invalid IPs like 999.999.999.999 will be caught by ping/ssh failures
 if [[ "$PI_HOST_PART" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     # It's an IP address - use it as-is, don't strip dots or add .local
     PI_HOSTNAME="$PI_HOST_PART"
     IS_IP_ADDRESS=true
 else
-    # It's a hostname - strip .local suffix if present
-    PI_HOSTNAME=$(echo "$PI_HOST_PART" | sed 's/\.local$//')
+    # It's a hostname - strip .local suffix if present, extract first component
+    PI_HOSTNAME=$(echo "$PI_HOST_PART" | sed 's/\.local$//' | cut -d'.' -f1)
     IS_IP_ADDRESS=false
 fi
 
@@ -808,12 +810,13 @@ extract_with_progress() {
         fi
     else
         # Extract with verbose error output
-        # Filter out harmless extended header warnings
+        # Filter out harmless extended header warnings, display unexpected errors
         tar -f "$tarfile" "${TAR_OPTS[@]}" 2>&1 | \
             grep -v "Ignoring unknown extended header keyword"
         # Capture pipe statuses immediately (must not run any commands before this)
         EXTRACT_STATUS=( "${PIPESTATUS[@]}" )
-        # Check tar's exit status (grep failure is OK if no warnings to filter)
+        # Check tar's exit status only (grep exit=1 when no matches is OK)
+        # Any unexpected errors from tar are displayed above and cause failure here
         if [ "${EXTRACT_STATUS[0]}" -ne 0 ]; then
             echo "[ERROR] Failed to extract $tarfile"
             return 1

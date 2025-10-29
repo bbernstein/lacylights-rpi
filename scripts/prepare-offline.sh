@@ -69,16 +69,20 @@ archive_with_fallback() {
                 tar_cmd+=(-C "$change_dir")
             fi
             tar_cmd+=("$source_dir")
-            COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null
-        } || \
-        {
-            # Fallback: basic tar
-            tar_cmd=(tar -czf "$output_file")
-            if [ -n "$change_dir" ]; then
-                tar_cmd+=(-C "$change_dir")
-            fi
-            tar_cmd+=("$source_dir")
-            COPYFILE_DISABLE=1 "${tar_cmd[@]}"
+            COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null || \
+            {
+                # Fallback: basic tar
+                tar_cmd=(tar -czf "$output_file")
+                if [ -n "$change_dir" ]; then
+                    tar_cmd+=(-C "$change_dir")
+                fi
+                tar_cmd+=("$source_dir")
+                COPYFILE_DISABLE=1 "${tar_cmd[@]}"
+                if [ $? -ne 0 ]; then
+                    print_error "Failed to create archive $output_file from $source_dir"
+                    return 1
+                fi
+            }
         }
     else
         # GNU tar or unknown tar
@@ -97,6 +101,10 @@ archive_with_fallback() {
             fi
             tar_cmd+=("$source_dir")
             COPYFILE_DISABLE=1 "${tar_cmd[@]}"
+            if [ $? -ne 0 ]; then
+                print_error "Failed to create archive $output_file from $source_dir"
+                return 1
+            fi
         }
     fi
 }

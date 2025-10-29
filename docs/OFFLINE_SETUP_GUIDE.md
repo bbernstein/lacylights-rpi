@@ -76,11 +76,11 @@ Create a "golden image" with all dependencies pre-installed:
    ```bash
    # On Linux:
    lsblk
-   sudo dd if=/dev/sdX of=lacylights-prepared.img bs=4M status=progress
+   sudo dd if=/dev/REPLACEME of=lacylights-prepared.img bs=4M status=progress
 
    # On macOS:
    diskutil list
-   sudo dd if=/dev/diskN of=lacylights-prepared.img bs=4m
+   sudo dd if=/dev/REPLACEME of=lacylights-prepared.img bs=4m
    ```
 3. Use this image for all future Pi installations
 
