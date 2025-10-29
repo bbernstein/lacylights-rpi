@@ -459,42 +459,46 @@ else
     print_info "Skipping Pi rebuild (using locally built artifacts)"
 fi
 
-# Install production dependencies on Pi
-print_header "Installing Production Dependencies on Pi"
+# Install production dependencies on Pi (only if we didn't already install during rebuild)
+if [ "$REBUILD_ON_PI" = false ]; then
+    print_header "Installing Production Dependencies on Pi"
 
-print_info "Installing runtime dependencies only..."
+    print_info "Installing runtime dependencies only..."
 
-# Dependency installation commands based on what we deployed
-INSTALL_COMMANDS=""
+    # Dependency installation commands based on what we deployed
+    INSTALL_COMMANDS=""
 
-if [ "$DEPLOY_BACKEND" = true ]; then
-    INSTALL_COMMANDS+="echo '[INFO] Installing backend dependencies...'
+    if [ "$DEPLOY_BACKEND" = true ]; then
+        INSTALL_COMMANDS+="echo '[INFO] Installing backend dependencies...'
 cd $BACKEND_REMOTE
 npm install --production
 "
-fi
+    fi
 
-if [ "$DEPLOY_FRONTEND" = true ]; then
-    INSTALL_COMMANDS+="echo '[INFO] Installing frontend dependencies...'
+    if [ "$DEPLOY_FRONTEND" = true ]; then
+        INSTALL_COMMANDS+="echo '[INFO] Installing frontend dependencies...'
 cd $FRONTEND_REMOTE
 npm install --production
 "
-fi
+    fi
 
-if [ "$DEPLOY_MCP" = true ]; then
-    INSTALL_COMMANDS+="echo '[INFO] Installing MCP dependencies...'
+    if [ "$DEPLOY_MCP" = true ]; then
+        INSTALL_COMMANDS+="echo '[INFO] Installing MCP dependencies...'
 cd $MCP_REMOTE
 npm install --production
 "
-fi
+    fi
 
-ssh "$PI_HOST" "$INSTALL_COMMANDS"
+    ssh "$PI_HOST" "$INSTALL_COMMANDS"
 
-if [ $? -eq 0 ]; then
-    print_success "Production dependencies installed"
+    if [ $? -eq 0 ]; then
+        print_success "Production dependencies installed"
+    else
+        print_error "Failed to install dependencies on Pi"
+        exit 1
+    fi
 else
-    print_error "Failed to install dependencies on Pi"
-    exit 1
+    print_info "Skipping separate dependency installation (already installed during rebuild)"
 fi
 
 # Restart services

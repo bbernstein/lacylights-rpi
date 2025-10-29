@@ -37,6 +37,25 @@ print_header() {
     echo -e "${CYAN}========================================${NC}"
 }
 
+# Helper function to create tar archives with fallback for different tar versions
+archive_with_fallback() {
+    local output_file="$1"
+    local source_dir="$2"
+    local extra_flags="$3"  # Optional extra flags like "-C dir"
+
+    # Disable macOS extended attributes to avoid warnings on Linux
+    if tar --version 2>&1 | grep -q "bsdtar"; then
+        # BSD tar (macOS) - use --no-mac-metadata if available
+        COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$output_file" $extra_flags "$source_dir" 2>/dev/null || \
+        COPYFILE_DISABLE=1 tar --no-xattrs -czf "$output_file" $extra_flags "$source_dir" 2>/dev/null || \
+        COPYFILE_DISABLE=1 tar -czf "$output_file" $extra_flags "$source_dir"
+    else
+        # GNU tar or unknown tar
+        COPYFILE_DISABLE=1 tar --no-xattrs -czf "$output_file" $extra_flags "$source_dir" 2>/dev/null || \
+        COPYFILE_DISABLE=1 tar -czf "$output_file" $extra_flags "$source_dir"
+    fi
+}
+
 # Parse command line arguments
 BACKEND_VERSION="main"
 FRONTEND_VERSION="main"
@@ -186,54 +205,25 @@ for project in backend frontend mcp; do
         print_info "Creating clean package cache for $project..."
         # Create a portable node_modules that works on ARM
         # We'll let the Pi rebuild native modules if needed
-        # Disable macOS extended attributes to avoid warnings on Linux
-        if tar --version 2>&1 | grep -q "bsdtar"; then
-            COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" node_modules/ 2>/dev/null || \
-            COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" node_modules/ 2>/dev/null || \
-            COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" node_modules/
-        else
-            COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" node_modules/ 2>/dev/null || \
-            COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" node_modules/
-        fi
+        archive_with_fallback "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" "node_modules/"
 
         # Create build artifacts archive
         print_info "Archiving build artifacts for $project..."
         if [ -d "dist" ]; then
             # Backend and MCP use dist/
-            if tar --version 2>&1 | grep -q "bsdtar"; then
-                COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$OUTPUT_DIR/releases/${project}-dist.tar.gz" dist/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_DIR/releases/${project}-dist.tar.gz" dist/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-dist.tar.gz" dist/
-            else
-                COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_DIR/releases/${project}-dist.tar.gz" dist/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-dist.tar.gz" dist/
-            fi
+            archive_with_fallback "$OUTPUT_DIR/releases/${project}-dist.tar.gz" "dist/"
             print_success "$project dist/ archived"
         fi
 
         if [ -d ".next" ]; then
             # Frontend uses .next/
-            if tar --version 2>&1 | grep -q "bsdtar"; then
-                COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$OUTPUT_DIR/releases/${project}-next.tar.gz" .next/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_DIR/releases/${project}-next.tar.gz" .next/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-next.tar.gz" .next/
-            else
-                COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_DIR/releases/${project}-next.tar.gz" .next/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-next.tar.gz" .next/
-            fi
+            archive_with_fallback "$OUTPUT_DIR/releases/${project}-next.tar.gz" ".next/"
             print_success "$project .next/ archived"
         fi
 
         if [ -d "out" ]; then
             # Frontend export build creates out/ directory (static files)
-            if tar --version 2>&1 | grep -q "bsdtar"; then
-                COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$OUTPUT_DIR/releases/${project}-out.tar.gz" out/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_DIR/releases/${project}-out.tar.gz" out/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-out.tar.gz" out/
-            else
-                COPYFILE_DISABLE=1 tar --no-xattrs -czf "$OUTPUT_DIR/releases/${project}-out.tar.gz" out/ 2>/dev/null || \
-                COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-out.tar.gz" out/
-            fi
+            archive_with_fallback "$OUTPUT_DIR/releases/${project}-out.tar.gz" "out/"
             print_success "$project out/ archived"
         fi
 
@@ -307,23 +297,8 @@ if [ -n "$OLD_BUNDLES" ]; then
     print_info "Removed $(echo "$OLD_BUNDLES" | wc -l | tr -d ' ') old bundle(s)"
 fi
 
-# Disable macOS extended attributes to create portable archive
-# Use --no-xattrs to exclude all extended attributes (requires GNU tar or recent BSD tar)
-# COPYFILE_DISABLE prevents ._* files from being created
-# --no-mac-metadata (if available) also helps
-if tar --version 2>&1 | grep -q "GNU tar"; then
-    # GNU tar
-    COPYFILE_DISABLE=1 tar --no-xattrs -czf "$BUNDLE_PATH" -C "$OUTPUT_DIR" .
-elif tar --version 2>&1 | grep -q "bsdtar"; then
-    # BSD tar (macOS) - use --no-mac-metadata if available
-    COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$BUNDLE_PATH" -C "$OUTPUT_DIR" . 2>/dev/null || \
-    COPYFILE_DISABLE=1 tar --no-xattrs -czf "$BUNDLE_PATH" -C "$OUTPUT_DIR" . 2>/dev/null || \
-    COPYFILE_DISABLE=1 tar -czf "$BUNDLE_PATH" -C "$OUTPUT_DIR" .
-else
-    # Unknown tar, try --no-xattrs, fall back to basic
-    COPYFILE_DISABLE=1 tar --no-xattrs -czf "$BUNDLE_PATH" -C "$OUTPUT_DIR" . 2>/dev/null || \
-    COPYFILE_DISABLE=1 tar -czf "$BUNDLE_PATH" -C "$OUTPUT_DIR" .
-fi
+# Create portable archive with all bundle contents
+archive_with_fallback "$BUNDLE_PATH" "." "-C $OUTPUT_DIR"
 
 print_success "Bundle archive created: $BUNDLE_PATH"
 

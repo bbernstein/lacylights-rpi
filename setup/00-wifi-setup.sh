@@ -317,7 +317,7 @@ while [ $WAITED -lt $MAX_WAIT ]; do
     # Check if we have an IP address
     IP_ADDR=$(ip addr show dev "$WIFI_DEVICE" | grep "inet " | awk '{print $2}' | cut -d/ -f1)
 
-    if [ -n "$IP_ADDR" ] && [ "$IP_ADDR" != "169.254."* ]; then
+    if [ -n "$IP_ADDR" ] && [[ "$IP_ADDR" != 169.254.* ]]; then
         HAS_IP=true
         print_success "✅ IP address assigned: $IP_ADDR"
         break

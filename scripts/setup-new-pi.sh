@@ -46,6 +46,7 @@ OFFLINE_BUNDLE=""
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"
 SKIP_WIFI=false
+OFFLINE_MODE_NEEDS_WIFI=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -730,7 +731,8 @@ else
     # Extract and install from bundle
     print_info "Extracting and installing from bundle..."
     ssh "$PI_HOST" << 'OFFLINE_INSTALL'
-# Don't use set -e in this section so we can capture and display errors properly
+# Don't use set -e in this section - we handle errors explicitly with return codes
+# All extract_with_progress calls check return values and exit on failure
 
 cd ~/lacylights-offline
 
