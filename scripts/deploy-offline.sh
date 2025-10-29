@@ -39,6 +39,7 @@ print_header() {
 
 # Parse command line arguments
 PI_HOST=""
+PI_USER="${PI_USER:-pi}"  # Default to 'pi', but allow override via environment variable
 BACKEND_VERSION="main"
 FRONTEND_VERSION="main"
 MCP_VERSION="main"
@@ -71,7 +72,8 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 <pi-host> [options]"
             echo ""
             echo "Arguments:"
-            echo "  <pi-host>                 SSH connection string (e.g., pi@ntclights.local)"
+            echo "  <pi-host>                 Hostname or SSH connection string"
+            echo "                            (e.g., ntclights.local or pi@ntclights.local)"
             echo ""
             echo "Options:"
             echo "  --backend-version TAG     Git tag/branch for backend (default: main)"
@@ -79,6 +81,10 @@ while [[ $# -gt 0 ]]; do
             echo "  --mcp-version TAG         Git tag/branch for MCP server (default: main)"
             echo "  --keep-bundle             Keep the offline bundle after installation"
             echo "  --help                    Show this help message"
+            echo ""
+            echo "Environment Variables:"
+            echo "  PI_USER                   Username for SSH (default: pi)"
+            echo "                            Example: PI_USER=admin $0 ntclights.local"
             echo ""
             echo "What this script does:"
             echo "  1. Prepares offline bundle with specified versions (Mac downloads from internet)"
@@ -91,8 +97,10 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Examples:"
             echo "  $0 pi@ntclights.local"
-            echo "  $0 pi@lacylights.local --backend-version v1.1.0 --frontend-version v0.2.0"
-            echo "  $0 pi@10.0.8.100 --keep-bundle"
+            echo "  $0 ntclights.local                    # Uses default user 'pi'"
+            echo "  PI_USER=admin $0 ntclights.local      # Uses user 'admin'"
+            echo "  $0 lacylights.local --backend-version v1.1.0 --frontend-version v0.2.0"
+            echo "  $0 10.0.8.100 --keep-bundle"
             echo ""
             echo "See docs/OFFLINE_INSTALLATION.md for detailed documentation."
             exit 0
@@ -113,9 +121,15 @@ done
 # Check if PI_HOST is provided
 if [ -z "$PI_HOST" ]; then
     print_error "Usage: $0 <pi-host> [options]"
-    print_error "Example: $0 pi@ntclights.local"
+    print_error "Example: $0 ntclights.local or $0 pi@ntclights.local"
     print_error "Use --help for more information"
     exit 1
+fi
+
+# Ensure PI_HOST includes username, default to 'pi' if not provided
+if [[ "$PI_HOST" != *@* ]]; then
+    print_info "No username specified, defaulting to user '$PI_USER'"
+    PI_HOST="$PI_USER@$PI_HOST"
 fi
 
 # Get script directory
@@ -200,12 +214,13 @@ else
     exit 1
 fi
 
-# Find the created bundle
-BUNDLE_PATH=$(ls -t lacylights-offline-*.tar.gz 2>/dev/null | head -1)
+# Find the created bundle in temp directory
+BUNDLE_DIR="${TMPDIR:-/tmp}/lacylights-bundles"
+BUNDLE_PATH=$(ls -t "$BUNDLE_DIR"/lacylights-offline-*.tar.gz 2>/dev/null | head -1)
 
 if [ -z "$BUNDLE_PATH" ] || [ ! -f "$BUNDLE_PATH" ]; then
     print_error "Bundle file not found after preparation"
-    print_error "Expected: lacylights-offline-*.tar.gz"
+    print_error "Expected: $BUNDLE_DIR/lacylights-offline-*.tar.gz"
     rm -rf "$TEMP_OUTPUT"
     exit 1
 fi

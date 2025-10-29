@@ -37,6 +37,78 @@ print_header() {
     echo -e "${CYAN}========================================${NC}"
 }
 
+# Detect tar type once for efficiency
+TAR_TYPE="gnu"
+if tar --version 2>&1 | grep -q "bsdtar"; then
+    TAR_TYPE="bsd"
+fi
+
+# Helper function to create tar archives with fallback for different tar versions
+archive_with_fallback() {
+    local output_file="$1"
+    local source_dir="$2"
+    local change_dir="$3"  # Optional: directory to change to before archiving
+
+    # Build tar command as array to avoid word splitting issues
+    local tar_cmd=()
+
+    # Disable macOS extended attributes to avoid warnings on Linux
+    if [ "$TAR_TYPE" = "bsd" ]; then
+        # BSD tar (macOS) - try flags in order of preference
+        tar_cmd=(tar --no-xattrs --no-mac-metadata -czf "$output_file")
+        if [ -n "$change_dir" ]; then
+            tar_cmd+=(-C "$change_dir")
+        fi
+        tar_cmd+=("$source_dir")
+
+        COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null || \
+        {
+            # Fallback: without macOS metadata flags
+            tar_cmd=(tar --no-xattrs -czf "$output_file")
+            if [ -n "$change_dir" ]; then
+                tar_cmd+=(-C "$change_dir")
+            fi
+            tar_cmd+=("$source_dir")
+            COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null || \
+            {
+                # Fallback: basic tar
+                tar_cmd=(tar -czf "$output_file")
+                if [ -n "$change_dir" ]; then
+                    tar_cmd+=(-C "$change_dir")
+                fi
+                tar_cmd+=("$source_dir")
+                COPYFILE_DISABLE=1 "${tar_cmd[@]}"
+                if [ $? -ne 0 ]; then
+                    print_error "Failed to create archive $output_file from $source_dir"
+                    return 1
+                fi
+            }
+        }
+    else
+        # GNU tar or unknown tar
+        tar_cmd=(tar --no-xattrs -czf "$output_file")
+        if [ -n "$change_dir" ]; then
+            tar_cmd+=(-C "$change_dir")
+        fi
+        tar_cmd+=("$source_dir")
+
+        COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null || \
+        {
+            # Fallback: basic tar
+            tar_cmd=(tar -czf "$output_file")
+            if [ -n "$change_dir" ]; then
+                tar_cmd+=(-C "$change_dir")
+            fi
+            tar_cmd+=("$source_dir")
+            COPYFILE_DISABLE=1 "${tar_cmd[@]}"
+            if [ $? -ne 0 ]; then
+                print_error "Failed to create archive $output_file from $source_dir"
+                return 1
+            fi
+        }
+    fi
+}
+
 # Parse command line arguments
 BACKEND_VERSION="main"
 FRONTEND_VERSION="main"
@@ -174,20 +246,41 @@ for project in backend frontend mcp; do
 
     cd "$TEMP_DIR/$project"
 
-    # Download dependencies and cache them
-    # Use --cache to store in our offline cache
-    # Use --prefer-offline to cache everything
+    # Download dependencies and build
     if [ -f package.json ]; then
         print_info "Downloading npm packages for $project..."
         npm install --cache "$OUTPUT_DIR/npm-cache" --prefer-offline
 
+        print_info "Building $project..."
+        # Build with NODE_ENV=production for proper production builds (frontend export)
+        NODE_ENV=production npm run build
+
         print_info "Creating clean package cache for $project..."
         # Create a portable node_modules that works on ARM
-        # We'll let the Pi rebuild native modules
-        # Disable macOS extended attributes to avoid warnings on Linux
-        COPYFILE_DISABLE=1 tar -czf "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" node_modules/
+        # We'll let the Pi rebuild native modules if needed
+        archive_with_fallback "$OUTPUT_DIR/releases/${project}-node_modules.tar.gz" "node_modules/"
 
-        print_success "$project dependencies cached"
+        # Create build artifacts archive
+        print_info "Archiving build artifacts for $project..."
+        if [ -d "dist" ]; then
+            # Backend and MCP use dist/
+            archive_with_fallback "$OUTPUT_DIR/releases/${project}-dist.tar.gz" "dist/"
+            print_success "$project dist/ archived"
+        fi
+
+        if [ -d ".next" ]; then
+            # Frontend uses .next/
+            archive_with_fallback "$OUTPUT_DIR/releases/${project}-next.tar.gz" ".next/"
+            print_success "$project .next/ archived"
+        fi
+
+        if [ -d "out" ]; then
+            # Frontend export build creates out/ directory (static files)
+            archive_with_fallback "$OUTPUT_DIR/releases/${project}-out.tar.gz" "out/"
+            print_success "$project out/ archived"
+        fi
+
+        print_success "$project built and dependencies cached"
     fi
 
     cd - > /dev/null
@@ -239,13 +332,28 @@ chmod +x "$OUTPUT_DIR/install-from-bundle.sh"
 # Create archive of entire bundle
 print_header "Creating Bundle Archive"
 
+# Use a temporary directory for bundle creation
+BUNDLE_DIR="${TMPDIR:-/tmp}/lacylights-bundles"
+mkdir -p "$BUNDLE_DIR"
+
 BUNDLE_NAME="lacylights-offline-$(date +%Y%m%d-%H%M%S).tar.gz"
+BUNDLE_PATH="$BUNDLE_DIR/$BUNDLE_NAME"
+
 print_info "Creating $BUNDLE_NAME..."
+print_info "Bundle location: $BUNDLE_PATH"
 
-# Disable macOS extended attributes to create portable archive
-COPYFILE_DISABLE=1 tar -czf "$BUNDLE_NAME" -C "$OUTPUT_DIR" .
+# Clean up old bundles (keep only last 3)
+print_info "Cleaning up old bundles..."
+OLD_BUNDLES=$(ls -t "$BUNDLE_DIR"/lacylights-offline-*.tar.gz 2>/dev/null | tail -n +4)
+if [ -n "$OLD_BUNDLES" ]; then
+    echo "$OLD_BUNDLES" | xargs rm -f
+    print_info "Removed $(echo "$OLD_BUNDLES" | wc -l | tr -d ' ') old bundle(s)"
+fi
 
-print_success "Bundle archive created: $BUNDLE_NAME"
+# Create portable archive with all bundle contents
+archive_with_fallback "$BUNDLE_PATH" "." "$OUTPUT_DIR"
+
+print_success "Bundle archive created: $BUNDLE_PATH"
 
 # Print summary
 print_header "Preparation Complete"
@@ -253,19 +361,20 @@ print_header "Preparation Complete"
 print_success "Offline bundle ready!"
 print_info ""
 print_info "Bundle contents:"
-print_info "  - Backend release: $BACKEND_VERSION"
-print_info "  - Frontend release: $FRONTEND_VERSION"
-print_info "  - MCP release: $MCP_VERSION"
+print_info "  - Backend release: $BACKEND_VERSION (pre-built)"
+print_info "  - Frontend release: $FRONTEND_VERSION (pre-built)"
+print_info "  - MCP release: $MCP_VERSION (pre-built)"
 print_info "  - NPM dependencies cache"
 print_info "  - Pre-downloaded node_modules"
+print_info "  - Pre-built artifacts (dist/, .next/)"
 print_info ""
 print_info "Bundle locations:"
 print_info "  - Directory: $OUTPUT_DIR"
-print_info "  - Archive: $BUNDLE_NAME"
+print_info "  - Archive: $BUNDLE_PATH"
 print_info ""
 print_info "Next steps:"
 print_info "  1. Transfer bundle to Pi or keep on Mac for setup"
 print_info "  2. Run setup script with --offline-bundle flag:"
-print_info "     ./scripts/setup-new-pi.sh pi@ntclights.local --offline-bundle $BUNDLE_NAME"
+print_info "     ./scripts/setup-new-pi.sh pi@ntclights.local --offline-bundle $BUNDLE_PATH"
 print_info ""
 print_success "Ready for offline installation!"
