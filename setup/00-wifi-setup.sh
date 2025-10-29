@@ -257,16 +257,8 @@ else
     # Secured network - use WPA/WPA2
     print_info "Connecting to secured network..."
 
-    # Determine security type from scan if available
-    if [ -n "$WIFI_SECURITY_TYPE" ]; then
-        if echo "$WIFI_SECURITY_TYPE" | grep -q "WPA"; then
-            KEY_MGMT="wpa-psk"
-        else
-            KEY_MGMT="wpa-psk"  # Default to WPA-PSK for most modern networks
-        fi
-    else
-        KEY_MGMT="wpa-psk"  # Default assumption
-    fi
+    # Set key management to WPA-PSK (default for most modern networks)
+    KEY_MGMT="wpa-psk"
 
     # Create the connection with explicit security settings AND route metrics
     # Setting metrics during creation ensures they're active immediately

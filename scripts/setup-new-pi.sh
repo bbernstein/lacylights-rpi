@@ -789,7 +789,7 @@ extract_with_progress() {
     fi
 
     # Build tar options as array to avoid word splitting issues
-    local TAR_OPTS=("-xz")
+    local TAR_OPTS=("-x" "-z")
     if [ -n "$dest" ]; then
         TAR_OPTS+=("-C" "$dest")
         if [ "$strip_components" != "0" ]; then

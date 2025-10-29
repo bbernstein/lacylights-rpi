@@ -63,7 +63,7 @@ archive_with_fallback() {
 
         COPYFILE_DISABLE=1 "${tar_cmd[@]}" 2>/dev/null || \
         {
-            # Fallback: without --no-mac-metadata
+            # Fallback: without macOS metadata flags
             tar_cmd=(tar --no-xattrs -czf "$output_file")
             if [ -n "$change_dir" ]; then
                 tar_cmd+=(-C "$change_dir")
