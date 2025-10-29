@@ -147,7 +147,7 @@ if [ -z "$PI_HOST" ]; then
 fi
 
 # Ensure PI_HOST includes username, default to 'pi' if not provided
-if [[ ! "$PI_HOST" == *"@"* ]]; then
+if [[ "$PI_HOST" != *@* ]]; then
     print_info "No username specified, defaulting to user '$PI_USER'"
     PI_HOST="$PI_USER@$PI_HOST"
 fi
@@ -249,7 +249,21 @@ print_info "Checking for required packages on Pi..."
 HAS_NODEJS=$(ssh "$PI_HOST" "command -v node &> /dev/null && echo 'yes' || echo 'no'")
 
 # Check npm in multiple locations (sometimes not in pi user's default PATH)
-HAS_NPM=$(ssh "$PI_HOST" "command -v npm &> /dev/null && echo 'yes' || test -f /usr/bin/npm && echo 'yes' || test -f /usr/local/bin/npm && echo 'yes' || echo 'no'")
+HAS_NPM=$(ssh "$PI_HOST" 'bash -s' <<'ENDSSH'
+check_npm_installed() {
+    if command -v npm &> /dev/null; then
+        echo "yes"
+    elif [ -f /usr/bin/npm ]; then
+        echo "yes"
+    elif [ -f /usr/local/bin/npm ]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+check_npm_installed
+ENDSSH
+)
 
 HAS_INTERNET=$(ssh "$PI_HOST" "ping -c 1 -W 2 8.8.8.8 > /dev/null 2>&1 && echo 'yes' || echo 'no'")
 
@@ -764,7 +778,8 @@ extract_with_progress() {
     # Check if pv is available for progress bar
     if command -v pv &> /dev/null; then
         pv "$tarfile" | tar $TAR_OPTS
-        if [ $? -ne 0 ]; then
+        PIPE_STATUS=( "${PIPESTATUS[@]}" )
+        if [ "${PIPE_STATUS[0]}" -ne 0 ] || [ "${PIPE_STATUS[1]}" -ne 0 ]; then
             echo "[ERROR] Failed to extract $tarfile"
             return 1
         fi

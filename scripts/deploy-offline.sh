@@ -127,7 +127,7 @@ if [ -z "$PI_HOST" ]; then
 fi
 
 # Ensure PI_HOST includes username, default to 'pi' if not provided
-if [[ ! "$PI_HOST" == *"@"* ]]; then
+if [[ "$PI_HOST" != *@* ]]; then
     print_info "No username specified, defaulting to user '$PI_USER'"
     PI_HOST="$PI_USER@$PI_HOST"
 fi

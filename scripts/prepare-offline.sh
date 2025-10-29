@@ -37,6 +37,12 @@ print_header() {
     echo -e "${CYAN}========================================${NC}"
 }
 
+# Detect tar type once for efficiency
+TAR_TYPE="gnu"
+if tar --version 2>&1 | grep -q "bsdtar"; then
+    TAR_TYPE="bsd"
+fi
+
 # Helper function to create tar archives with fallback for different tar versions
 archive_with_fallback() {
     local output_file="$1"
@@ -44,7 +50,7 @@ archive_with_fallback() {
     local extra_flags="$3"  # Optional extra flags like "-C dir"
 
     # Disable macOS extended attributes to avoid warnings on Linux
-    if tar --version 2>&1 | grep -q "bsdtar"; then
+    if [ "$TAR_TYPE" = "bsd" ]; then
         # BSD tar (macOS) - use --no-mac-metadata if available
         COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf "$output_file" $extra_flags "$source_dir" 2>/dev/null || \
         COPYFILE_DISABLE=1 tar --no-xattrs -czf "$output_file" $extra_flags "$source_dir" 2>/dev/null || \

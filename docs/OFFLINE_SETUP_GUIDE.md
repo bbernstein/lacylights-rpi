@@ -66,6 +66,9 @@ Create a "golden image" with all dependencies pre-installed:
 
 1. Complete Option A above
 2. Create an image backup:
+
+   **⚠️ Warning:** Verify `/dev/sdX` is the correct SD card device using `lsblk` before running this command. Using the wrong device can cause data loss.
+
    ```bash
    # On your Mac/PC
    sudo dd if=/dev/sdX of=lacylights-prepared.img bs=4M status=progress

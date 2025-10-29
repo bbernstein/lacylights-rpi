@@ -31,7 +31,7 @@ LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REPOS_DIR="$(dirname "$LOCAL_DIR")"
 
 # Ensure PI_HOST includes username, default to PI_USER if not provided
-if [[ ! "$PI_HOST" == *"@"* ]]; then
+if [[ "$PI_HOST" != *@* ]]; then
     PI_HOST="$PI_USER@$PI_HOST"
 fi
 

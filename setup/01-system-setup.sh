@@ -81,7 +81,7 @@ print_info "Checking Node.js..."
 # Check if Node.js is already installed
 if command -v node &> /dev/null; then
     NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-    if [ "$NODE_VERSION" -ge 18 ]; then
+    if [ -n "$NODE_VERSION" ] && [[ "$NODE_VERSION" =~ ^[0-9]+$ ]] && [ "$NODE_VERSION" -ge 18 ]; then
         print_success "Node.js $NODE_VERSION already installed ($(node -v))"
 
         # Check if npm is available
