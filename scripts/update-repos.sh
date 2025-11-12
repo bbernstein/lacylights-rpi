@@ -149,10 +149,14 @@ restore_from_backup() {
     # Stop service before restoring
     case "$repo_name" in
         lacylights-node)
-            sudo systemctl stop lacylights-backend || true
+            if systemctl is-active --quiet lacylights-backend; then
+                sudo systemctl stop lacylights-backend
+            fi
             ;;
         lacylights-fe)
-            sudo systemctl stop lacylights-frontend || true
+            if systemctl is-active --quiet lacylights-frontend; then
+                sudo systemctl stop lacylights-frontend
+            fi
             ;;
     esac
 
@@ -389,13 +393,22 @@ update_repo() {
     print_status "Stopping $repo_name service..."
     case "$repo_name" in
         lacylights-node)
-            sudo systemctl stop lacylights-backend || true
+            if systemctl is-active --quiet lacylights-backend; then
+                sudo systemctl stop lacylights-backend
+            fi
             ;;
         lacylights-fe)
-            sudo systemctl stop lacylights-frontend || true
+            if systemctl is-active --quiet lacylights-frontend; then
+                sudo systemctl stop lacylights-frontend
+            fi
             ;;
         lacylights-mcp)
-            # MCP doesn't have a standalone service
+            # MCP doesn't have a standalone service, but backend depends on it
+            # Stop backend so it can pick up new MCP version after update
+            if systemctl is-active --quiet lacylights-backend; then
+                print_status "Stopping backend service to pick up new MCP version..."
+                sudo systemctl stop lacylights-backend
+            fi
             ;;
     esac
 
@@ -575,6 +588,34 @@ update_repo() {
 
             if [ $retry_count -eq $max_retries ]; then
                 print_error "Failed to start lacylights-frontend service after $max_retries attempts"
+                print_status "Attempting to restore from backup..."
+                restore_from_backup "$backup_file" "$repo_name"
+                return 1
+            fi
+            ;;
+        lacylights-mcp)
+            # MCP doesn't have a standalone service, restart backend to pick up new MCP version
+            print_status "Restarting backend service to pick up new MCP version..."
+            sudo systemctl start lacylights-backend || true
+            # Retry with exponential backoff to allow service time to start
+            local retry_count=0
+            local max_retries=5
+            local wait_time=1
+            while [ $retry_count -lt $max_retries ]; do
+                sleep $wait_time
+                if sudo systemctl is-active --quiet lacylights-backend; then
+                    print_success "lacylights-backend service started successfully with new MCP version"
+                    break
+                fi
+                retry_count=$((retry_count + 1))
+                wait_time=$((wait_time * 2))
+                if [ $retry_count -lt $max_retries ]; then
+                    print_status "Service not ready, retrying in ${wait_time}s (attempt $((retry_count + 1))/$max_retries)..."
+                fi
+            done
+
+            if [ $retry_count -eq $max_retries ]; then
+                print_error "Failed to start lacylights-backend service after $max_retries attempts"
                 print_status "Attempting to restore from backup..."
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
