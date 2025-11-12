@@ -9,6 +9,7 @@ set -e  # Exit on error
 LACYLIGHTS_ROOT="/opt/lacylights"
 REPOS_DIR="$LACYLIGHTS_ROOT/repos"
 SCRIPTS_DIR="$LACYLIGHTS_ROOT/scripts"
+BACKUP_DIR="$LACYLIGHTS_ROOT/backups"
 LOG_FILE="$LACYLIGHTS_ROOT/logs/update.log"
 
 # GitHub organization
@@ -76,7 +77,8 @@ get_latest_release_version() {
 
         local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$api_url")
 
-        if [ "$http_code" -ne 200 ]; then
+        # Check for 2xx success codes
+        if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
             rm -f "$response_file"
             echo "unknown"
             return
@@ -116,7 +118,8 @@ list_available_versions() {
 
         local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$api_url")
 
-        if [ "$http_code" -ne 200 ]; then
+        # Check for 2xx success codes
+        if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
             rm -f "$response_file"
             echo "[]"
             return
@@ -128,6 +131,52 @@ list_available_versions() {
     else
         curl -s "$api_url" | grep '"tag_name"' | cut -d '"' -f 4 | head -20
     fi
+}
+
+# Function to restore from backup
+restore_from_backup() {
+    local backup_file="$1"
+    local repo_name="$2"
+    local repo_dir="$REPOS_DIR/$repo_name"
+
+    print_status "Restoring $repo_name from backup..."
+
+    if [ ! -f "$backup_file" ]; then
+        print_error "Backup file not found: $backup_file"
+        return 1
+    fi
+
+    # Stop service before restoring
+    case "$repo_name" in
+        lacylights-node)
+            sudo systemctl stop lacylights-backend || true
+            ;;
+        lacylights-fe)
+            sudo systemctl stop lacylights-frontend || true
+            ;;
+    esac
+
+    # Remove current directory
+    rm -rf "$repo_dir"
+
+    # Extract backup
+    if ! tar -xzf "$backup_file" -C "$(dirname "$repo_dir")"; then
+        print_error "Failed to restore from backup"
+        return 1
+    fi
+
+    # Start service
+    case "$repo_name" in
+        lacylights-node)
+            sudo systemctl start lacylights-backend || true
+            ;;
+        lacylights-fe)
+            sudo systemctl start lacylights-frontend || true
+            ;;
+    esac
+
+    print_success "$repo_name restored from backup"
+    return 0
 }
 
 # Function to get version information for all repos
@@ -170,6 +219,17 @@ EOF
 update_repo() {
     local repo_name="$1"
     local target_version="$2"  # Can be "latest" or specific version like "v1.2.3"
+
+    # Validate repo_name against whitelist
+    case "$repo_name" in
+        "lacylights-fe"|"lacylights-node"|"lacylights-mcp")
+            ;;
+        *)
+            print_error "Invalid repository name: $repo_name. Must be one of: lacylights-fe, lacylights-node, lacylights-mcp"
+            return 1
+            ;;
+    esac
+
     local repo_dir="$REPOS_DIR/$repo_name"
 
     print_status "Updating $repo_name to $target_version..."
@@ -239,8 +299,22 @@ update_repo() {
     local download_url="https://github.com/$GITHUB_ORG/$repo_name/archive/refs/tags/$version_to_install.tar.gz"
     local archive_file="$temp_dir/${repo_name}.tar.gz"
 
-    if ! curl -sL "$download_url" -o "$archive_file"; then
-        print_error "Failed to download $repo_name $version_to_install"
+    # Use -f flag to fail on HTTP errors (404, etc.)
+    if ! curl -fsSL "$download_url" -o "$archive_file"; then
+        print_error "Failed to download $repo_name $version_to_install (check if version exists)"
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
+    fi
+
+    # Validate the downloaded archive integrity
+    print_status "Validating archive integrity..."
+    if ! file "$archive_file" | grep -q 'gzip compressed data'; then
+        print_error "Downloaded file is not a valid gzip archive"
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
+    fi
+    if ! tar -tzf "$archive_file" > /dev/null 2>&1; then
+        print_error "Downloaded archive is corrupted or not a valid tar.gz"
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     fi
@@ -253,6 +327,18 @@ update_repo() {
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     fi
+
+    # Create permanent backup before any destructive operations
+    mkdir -p "$BACKUP_DIR"
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    local backup_file="$BACKUP_DIR/${repo_name}_backup_${timestamp}.tar.gz"
+    print_status "Creating backup of $repo_name at $backup_file..."
+    if ! tar -czf "$backup_file" -C "$(dirname "$repo_dir")" "$(basename "$repo_dir")"; then
+        print_error "Failed to create backup of $repo_name. Aborting update."
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
+    fi
+    print_success "Backup created successfully"
 
     # Stop services before replacing files
     print_status "Stopping $repo_name service..."
@@ -272,6 +358,8 @@ update_repo() {
     rm -rf "$repo_dir"
     mv "$temp_dir/extract" "$repo_dir" || {
         print_error "Failed to move extracted files"
+        print_status "Attempting to restore from backup..."
+        restore_from_backup "$backup_file" "$repo_name"
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     }
@@ -305,18 +393,40 @@ update_repo() {
 
     print_success "$repo_name extracted to $repo_dir"
 
-    # Install dependencies
+    # Install dependencies (all dependencies for build, then prune if needed)
     if [ -f "$repo_dir/package.json" ]; then
         print_status "Installing dependencies for $repo_name..."
         pushd "$repo_dir" >/dev/null
-        if [ -f "package-lock.json" ]; then
-            if ! npm ci --production; then
-                print_warning "npm ci failed, falling back to npm install..."
-                npm install --production
+
+        # Check if build is needed first
+        local needs_build=false
+        if [ -f "tsconfig.json" ] && grep -q '"build"' "package.json"; then
+            needs_build=true
+        fi
+
+        # Install all dependencies if build is needed, otherwise production only
+        if [ "$needs_build" = true ]; then
+            if [ -f "package-lock.json" ]; then
+                # Remove node_modules to ensure clean npm ci
+                rm -rf node_modules
+                if ! npm ci; then
+                    print_warning "npm ci failed, falling back to npm install..."
+                    npm install
+                fi
+            else
+                npm install
             fi
         else
-            npm install --production
+            if [ -f "package-lock.json" ]; then
+                if ! npm ci --production; then
+                    print_warning "npm ci failed, falling back to npm install..."
+                    npm install --production
+                fi
+            else
+                npm install --production
+            fi
         fi
+
         popd >/dev/null
         print_success "Dependencies installed for $repo_name"
     fi
@@ -328,9 +438,15 @@ update_repo() {
             pushd "$repo_dir" >/dev/null
             if npm run build; then
                 print_success "Build succeeded for $repo_name"
+
+                # Prune dev dependencies after successful build
+                print_status "Pruning dev dependencies..."
+                npm prune --production
             else
                 print_error "Build failed for $repo_name"
+                print_status "Attempting to restore from backup..."
                 popd >/dev/null
+                restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
             popd >/dev/null
@@ -344,31 +460,43 @@ update_repo() {
         if npx prisma migrate deploy; then
             print_success "Database migrations completed for $repo_name"
         else
-            print_warning "Database migrations failed - you may need to run manually"
+            print_error "Database migrations failed - aborting service startup"
+            print_status "Attempting to restore from backup..."
+            popd >/dev/null
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
         fi
         popd >/dev/null
     fi
 
-    # Start services
+    # Start services with automatic rollback on failure
     print_status "Starting $repo_name service..."
     case "$repo_name" in
         lacylights-node)
-            sudo systemctl start lacylights-backend
+            # Use || true to prevent script exit on start failure
+            sudo systemctl start lacylights-backend || true
+            # Wait for service to start (2 seconds + exponential backoff for slower hardware)
             sleep 2
             if sudo systemctl is-active --quiet lacylights-backend; then
                 print_success "lacylights-backend service started successfully"
             else
                 print_error "Failed to start lacylights-backend service"
+                print_status "Attempting to restore from backup..."
+                restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
             ;;
         lacylights-fe)
-            sudo systemctl start lacylights-frontend
+            # Use || true to prevent script exit on start failure
+            sudo systemctl start lacylights-frontend || true
+            # Wait for service to start (2 seconds + exponential backoff for slower hardware)
             sleep 2
             if sudo systemctl is-active --quiet lacylights-frontend; then
                 print_success "lacylights-frontend service started successfully"
             else
                 print_error "Failed to start lacylights-frontend service"
+                print_status "Attempting to restore from backup..."
+                restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
             ;;
