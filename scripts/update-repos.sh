@@ -69,11 +69,11 @@ get_latest_release_version() {
     local api_url="https://api.github.com/repos/$GITHUB_ORG/$repo/releases/latest"
 
     if command_exists jq; then
-        local response_file=$(mktemp)
-        if [ -z "$response_file" ]; then
+        local response_file
+        response_file=$(mktemp) || {
             echo "unknown"
             return
-        fi
+        }
 
         local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$api_url")
 
@@ -110,11 +110,11 @@ list_available_versions() {
     local api_url="https://api.github.com/repos/$GITHUB_ORG/$repo/releases"
 
     if command_exists jq; then
-        local response_file=$(mktemp)
-        if [ -z "$response_file" ]; then
+        local response_file
+        response_file=$(mktemp) || {
             echo "[]"
             return
-        fi
+        }
 
         local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$api_url")
 
@@ -156,6 +156,12 @@ restore_from_backup() {
             ;;
     esac
 
+    # Safety check: Only allow removal if repo_dir is within /opt/lacylights/repos/
+    if [[ ! "$repo_dir" =~ ^/opt/lacylights/repos/ ]] || [ "$repo_dir" = "/" ] || [ -z "$repo_dir" ]; then
+        print_error "Invalid repository directory path: $repo_dir"
+        return 1
+    fi
+
     # Remove current directory
     rm -rf "$repo_dir"
 
@@ -164,6 +170,45 @@ restore_from_backup() {
         print_error "Failed to restore from backup"
         return 1
     fi
+
+    # Reinstall dependencies and rebuild for the restored version
+    print_status "Reinstalling dependencies for restored $repo_name..."
+    pushd "$repo_dir" >/dev/null
+
+    # Install dependencies (production-only for npm repos)
+    if [ -f "package.json" ]; then
+        if [ -f "package-lock.json" ]; then
+            rm -rf node_modules
+            if ! npm ci --production; then
+                print_warning "npm ci failed, falling back to npm install..."
+                npm install --production
+            fi
+        else
+            npm install --production
+        fi
+
+        # Rebuild if necessary (only for lacylights-node which needs build)
+        if [ "$repo_name" = "lacylights-node" ]; then
+            print_status "Rebuilding restored $repo_name..."
+            if ! npm run build; then
+                print_error "Build failed for restored $repo_name"
+                popd >/dev/null
+                return 1
+            fi
+        fi
+
+        # Run database migrations for lacylights-node
+        if [ "$repo_name" = "lacylights-node" ] && [ -f "prisma/schema.prisma" ]; then
+            print_status "Running database migrations for restored $repo_name..."
+            if ! npx prisma migrate deploy; then
+                print_error "Database migrations failed for restored $repo_name"
+                popd >/dev/null
+                return 1
+            fi
+        fi
+    fi
+
+    popd >/dev/null
 
     # Start service
     case "$repo_name" in
@@ -287,12 +332,12 @@ update_repo() {
     fi
 
     # Create temporary directory for download
-    local temp_dir=$(mktemp -d)
-    if [ -z "$temp_dir" ] || [ ! -d "$temp_dir" ]; then
+    local temp_dir
+    temp_dir=$(mktemp -d) || {
         print_error "Failed to create temporary directory"
         rm -rf "$temp_backup"
         return 1
-    fi
+    }
 
     # Download the release archive
     print_status "Downloading $repo_name $version_to_install..."
@@ -355,6 +400,13 @@ update_repo() {
     esac
 
     # Replace old directory with new
+    # Safety check: Only allow deletion if repo_dir is a subdirectory of /opt/lacylights/repos/
+    if [[ ! "$repo_dir" =~ ^/opt/lacylights/repos/ ]] || [ "$repo_dir" = "/" ] || [ "$repo_dir" = "/opt" ]; then
+        print_error "Invalid repository directory path: $repo_dir"
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
+    fi
+
     rm -rf "$repo_dir"
     mv "$temp_dir/extract" "$repo_dir" || {
         print_error "Failed to move extracted files"
@@ -393,7 +445,7 @@ update_repo() {
 
     print_success "$repo_name extracted to $repo_dir"
 
-    # Install dependencies (all dependencies for build, then prune if needed)
+    # Install dependencies (all if build needed, production-only otherwise)
     if [ -f "$repo_dir/package.json" ]; then
         print_status "Installing dependencies for $repo_name..."
         pushd "$repo_dir" >/dev/null
@@ -441,7 +493,9 @@ update_repo() {
 
                 # Prune dev dependencies after successful build
                 print_status "Pruning dev dependencies..."
-                npm prune --production
+                if ! npm prune --production; then
+                    print_warning "Failed to prune dev dependencies, continuing anyway..."
+                fi
             else
                 print_error "Build failed for $repo_name"
                 print_status "Attempting to restore from backup..."
@@ -475,12 +529,25 @@ update_repo() {
         lacylights-node)
             # Use || true to prevent script exit on start failure
             sudo systemctl start lacylights-backend || true
-            # Wait for service to start (2 seconds + exponential backoff for slower hardware)
-            sleep 2
-            if sudo systemctl is-active --quiet lacylights-backend; then
-                print_success "lacylights-backend service started successfully"
-            else
-                print_error "Failed to start lacylights-backend service"
+            # Retry with exponential backoff to allow service time to start
+            local retry_count=0
+            local max_retries=5
+            local wait_time=1
+            while [ $retry_count -lt $max_retries ]; do
+                sleep $wait_time
+                if sudo systemctl is-active --quiet lacylights-backend; then
+                    print_success "lacylights-backend service started successfully"
+                    break
+                fi
+                retry_count=$((retry_count + 1))
+                wait_time=$((wait_time * 2))
+                if [ $retry_count -lt $max_retries ]; then
+                    print_status "Service not ready, retrying in ${wait_time}s (attempt $((retry_count + 1))/$max_retries)..."
+                fi
+            done
+
+            if [ $retry_count -eq $max_retries ]; then
+                print_error "Failed to start lacylights-backend service after $max_retries attempts"
                 print_status "Attempting to restore from backup..."
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
@@ -489,12 +556,25 @@ update_repo() {
         lacylights-fe)
             # Use || true to prevent script exit on start failure
             sudo systemctl start lacylights-frontend || true
-            # Wait for service to start (2 seconds + exponential backoff for slower hardware)
-            sleep 2
-            if sudo systemctl is-active --quiet lacylights-frontend; then
-                print_success "lacylights-frontend service started successfully"
-            else
-                print_error "Failed to start lacylights-frontend service"
+            # Retry with exponential backoff to allow service time to start
+            local retry_count=0
+            local max_retries=5
+            local wait_time=1
+            while [ $retry_count -lt $max_retries ]; do
+                sleep $wait_time
+                if sudo systemctl is-active --quiet lacylights-frontend; then
+                    print_success "lacylights-frontend service started successfully"
+                    break
+                fi
+                retry_count=$((retry_count + 1))
+                wait_time=$((wait_time * 2))
+                if [ $retry_count -lt $max_retries ]; then
+                    print_status "Service not ready, retrying in ${wait_time}s (attempt $((retry_count + 1))/$max_retries)..."
+                fi
+            done
+
+            if [ $retry_count -eq $max_retries ]; then
+                print_error "Failed to start lacylights-frontend service after $max_retries attempts"
                 print_status "Attempting to restore from backup..."
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
