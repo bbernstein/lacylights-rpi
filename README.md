@@ -506,6 +506,19 @@ This is a deployment repository. For application code contributions:
 
 For deployment tooling improvements, open an issue or PR in this repository.
 
+### For Maintainers: Creating Releases
+
+To create releases, you need to set up a `RELEASE_TOKEN` secret first:
+
+📖 **See [docs/RELEASE_TOKEN_SETUP.md](docs/RELEASE_TOKEN_SETUP.md) for setup instructions**
+
+Once configured, create releases via GitHub Actions:
+1. Go to Actions → Create Release
+2. Select version bump type (patch/minor/major)
+3. Run workflow
+
+See [docs/RELEASES.md](docs/RELEASES.md) for complete release management guide.
+
 ## Documentation
 
 - **Getting Started:**
@@ -520,6 +533,7 @@ For deployment tooling improvements, open an issue or PR in this repository.
   - [UPDATING.md](docs/UPDATING.md) - System updates
   - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
   - [RELEASES.md](docs/RELEASES.md) - Creating and managing releases
+  - [RELEASE_TOKEN_SETUP.md](docs/RELEASE_TOKEN_SETUP.md) - Setting up release automation token (maintainers only)
 
 - **Scripts:**
   - [scripts/deploy.sh](scripts/deploy.sh) - Deployment script
