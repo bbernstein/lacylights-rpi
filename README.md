@@ -42,17 +42,23 @@ cd ~/lacylights-setup
 
 **Getting 404 errors?** The file may be cached. Try the git clone method below or wait a few minutes for GitHub's CDN to update.
 
-**Or install remotely from your development machine:**
+### Remote Installation (From Your Development Machine)
+
+If you want to install from your computer to a remote Pi:
 
 ```bash
-# This will download, install, and set up everything on your Pi
+# From your development machine, run the setup script with the Pi's hostname
+# This script will SSH to the Pi and run all setup steps automatically
+cd lacylights-rpi  # Clone the repo on your machine first
+./scripts/setup-new-pi.sh pi@raspberrypi.local
+```
+
+Or use the automated installer:
+
+```bash
+# From your development machine
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | \
     bash -s -- latest pi@raspberrypi.local
-
-# Then complete the setup
-ssh pi@raspberrypi.local
-cd ~/lacylights-setup
-./scripts/setup-new-pi.sh localhost
 ```
 
 Then access your LacyLights at: **http://lacylights.local**
@@ -67,10 +73,16 @@ This method always works and doesn't depend on GitHub's CDN cache:
 # First, update CA certificates
 sudo apt-get update && sudo apt-get install -y ca-certificates curl git
 
-# Clone and run
+# Clone repository
 git clone https://github.com/bbernstein/lacylights-rpi.git
 cd lacylights-rpi
-./scripts/setup-new-pi.sh localhost
+
+# Run setup scripts directly (since you're already on the Pi)
+sudo ./setup/01-system-setup.sh
+sudo ./setup/02-network-setup.sh
+sudo ./setup/03-database-setup.sh
+sudo ./setup/04-permissions-setup.sh
+sudo ./setup/05-service-install.sh
 ```
 
 **Option B: Direct Download (If Git Not Available)**
@@ -81,8 +93,12 @@ mkdir -p ~/lacylights-setup
 cd ~/lacylights-setup
 curl -fsSL https://github.com/bbernstein/lacylights-rpi/archive/refs/heads/main.tar.gz | tar xz --strip-components=1
 
-# Run setup
-./scripts/setup-new-pi.sh localhost
+# Run setup scripts directly (since you're already on the Pi)
+sudo ./setup/01-system-setup.sh
+sudo ./setup/02-network-setup.sh
+sudo ./setup/03-database-setup.sh
+sudo ./setup/04-permissions-setup.sh
+sudo ./setup/05-service-install.sh
 ```
 
 **For Development:** Specify specific component versions:
