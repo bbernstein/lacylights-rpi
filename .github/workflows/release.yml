@@ -1,0 +1,162 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      release_name:
+        description: 'Release name (optional, auto-generated if empty)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Calculate new version
+        id: version
+        run: |
+          # Get the latest tag, default to v0.0.0 if none exists
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Remove 'v' prefix and split into parts
+          VERSION=${LATEST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          # Increment based on bump type
+          case "${{ github.event.inputs.version_bump }}" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          NEW_TAG="v$NEW_VERSION"
+
+          echo "New version: $NEW_VERSION"
+          echo "New tag: $NEW_TAG"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+      - name: Create VERSION file
+        run: |
+          echo "${{ steps.version.outputs.version }}" > VERSION
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+
+      - name: Push version update and create tag
+        run: |
+          # Push the commit and create tag with retry logic
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
+
+            if git push origin main && git tag ${{ steps.version.outputs.tag }} && git push origin ${{ steps.version.outputs.tag }}; then
+              echo "Successfully pushed version update and tag"
+              exit 0
+            else
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                echo "Push failed, cleaning up tag and retrying in 5 seconds..."
+                git tag -d ${{ steps.version.outputs.tag }} 2>/dev/null || true
+                sleep 5
+              else
+                echo "Failed to push after $MAX_ATTEMPTS attempts"
+                git tag -d ${{ steps.version.outputs.tag }} 2>/dev/null || true
+                exit 1
+              fi
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+      - name: Create release archive
+        run: |
+          # Create a clean archive with all necessary files
+          mkdir -p release-temp
+
+          # Copy all necessary files and directories
+          cp -r scripts setup config systemd utils docs release-temp/
+          cp README.md LICENSE 2>/dev/null || true
+          cp VERSION release-temp/
+
+          # Create tarball
+          cd release-temp
+          tar czf ../lacylights-rpi-${{ steps.version.outputs.version }}.tar.gz .
+          cd ..
+
+          # Verify archive
+          echo "Archive contents:"
+          tar tzf lacylights-rpi-${{ steps.version.outputs.version }}.tar.gz | head -20
+
+      - name: Generate release name
+        id: release_name
+        run: |
+          if [ -n "${{ github.event.inputs.release_name }}" ]; then
+            echo "name=${{ github.event.inputs.release_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=LacyLights RPi ${{ steps.version.outputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for existing release
+        id: check_release
+        run: |
+          if gh release view ${{ steps.version.outputs.tag }} >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release ${{ steps.version.outputs.tag }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release ${{ steps.version.outputs.tag }} does not exist yet"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub release
+        if: steps.check_release.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.version.outputs.tag }} \
+            --title "${{ steps.release_name.outputs.name }}" \
+            --generate-notes \
+            lacylights-rpi-${{ steps.version.outputs.version }}.tar.gz
+
+      - name: Output release URL
+        run: |
+          echo "✅ Release created successfully!"
+          echo "Version: ${{ steps.version.outputs.version }}"
+          echo "Tag: ${{ steps.version.outputs.tag }}"
+          echo "URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }}"
+          echo ""
+          echo "Installation command:"
+          echo "curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash -s -- ${{ steps.version.outputs.tag }}"
