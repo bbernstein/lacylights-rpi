@@ -19,7 +19,12 @@ LacyLights is a complete stage lighting control system with:
 
 ### New Installation (One-Command Setup)
 
-For a fresh Raspberry Pi, use our one-command installer:
+**Fresh Raspberry Pi?** Update CA certificates first to avoid SSL errors:
+```bash
+sudo apt-get update && sudo apt-get install -y ca-certificates curl
+```
+
+Then use our one-command installer:
 
 ```bash
 # On your Raspberry Pi (SSH in first):
@@ -29,6 +34,8 @@ curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/inst
 cd ~/lacylights-setup
 ./scripts/setup-new-pi.sh localhost
 ```
+
+**Having SSL certificate errors?** See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for solutions.
 
 **Or install remotely from your development machine:**
 
@@ -160,6 +167,22 @@ Complete guides in `docs/`:
 - Raspberry Pi OS (64-bit, Lite or Desktop)
 - SSH enabled
 - Internet connection for initial setup
+- **Important**: Updated CA certificates (see [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md))
+
+**First-time setup checklist:**
+```bash
+# Update CA certificates to avoid SSL errors
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+
+# Verify system time is correct
+date
+
+# Test internet connectivity
+ping -c 3 google.com
+```
+
+See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for complete setup guide and troubleshooting.
 
 ### Software on Development Machine
 
@@ -522,6 +545,7 @@ See [docs/RELEASES.md](docs/RELEASES.md) for complete release management guide.
 ## Documentation
 
 - **Getting Started:**
+  - [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) - Prerequisites and common issues (read this first!)
   - [INITIAL_SETUP.md](docs/INITIAL_SETUP.md) - First-time setup
   - [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Deploying changes
 
