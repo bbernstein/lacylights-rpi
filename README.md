@@ -17,9 +17,37 @@ LacyLights is a complete stage lighting control system with:
 
 ## Quick Start
 
-### New Installation
+### New Installation (One-Command Setup)
 
-For a fresh Raspberry Pi, use the automated setup:
+For a fresh Raspberry Pi, use our one-command installer:
+
+```bash
+# On your Raspberry Pi (SSH in first):
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
+
+# Then run the setup:
+cd ~/lacylights-setup
+./scripts/setup-new-pi.sh localhost
+```
+
+**Or install remotely from your development machine:**
+
+```bash
+# This will download, install, and set up everything on your Pi
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | \
+    bash -s -- latest pi@raspberrypi.local
+
+# Then complete the setup
+ssh pi@raspberrypi.local
+cd ~/lacylights-setup
+./scripts/setup-new-pi.sh localhost
+```
+
+Then access your LacyLights at: **http://lacylights.local**
+
+### Alternative: Git Clone Method
+
+If you prefer to clone the repository for development:
 
 ```bash
 # Clone this repository
@@ -27,7 +55,6 @@ git clone https://github.com/bbernstein/lacylights-rpi.git
 cd lacylights-rpi
 
 # Run complete setup (takes 15-20 minutes)
-# This clones the latest code from GitHub
 ./scripts/setup-new-pi.sh pi@raspberrypi.local
 
 # Or specify specific versions:
@@ -36,8 +63,6 @@ cd lacylights-rpi
     --frontend-version v0.2.0 \
     --mcp-version v1.0.0
 ```
-
-Then access your LacyLights at: **http://lacylights.local**
 
 **Note:** The setup script downloads release archives directly from GitHub to the Pi (no git repositories created), so you don't need to have them cloned locally.
 
@@ -51,6 +76,34 @@ cd lacylights-rpi
 ```
 
 That's it! The script handles type checking, syncing, building, and restarting.
+
+## Installation Options
+
+### Option 1: One-Command Install (Recommended)
+
+Download and install a specific release with a single command:
+
+```bash
+# Install latest release
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
+
+# Install specific version
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash -s -- v1.0.0
+
+# Remote installation from your development machine
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | \
+    bash -s -- latest pi@raspberrypi.local
+```
+
+### Option 2: Git Clone (For Development)
+
+Clone the repository if you plan to modify deployment scripts or contribute:
+
+```bash
+git clone https://github.com/bbernstein/lacylights-rpi.git
+cd lacylights-rpi
+./scripts/setup-new-pi.sh pi@raspberrypi.local
+```
 
 ## What's Included
 
@@ -466,10 +519,12 @@ For deployment tooling improvements, open an issue or PR in this repository.
 - **Maintenance:**
   - [UPDATING.md](docs/UPDATING.md) - System updates
   - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
+  - [RELEASES.md](docs/RELEASES.md) - Creating and managing releases
 
 - **Scripts:**
   - [scripts/deploy.sh](scripts/deploy.sh) - Deployment script
   - [scripts/setup-new-pi.sh](scripts/setup-new-pi.sh) - Setup script
+  - [install.sh](install.sh) - One-command installer
 
 ## Related Repositories
 
