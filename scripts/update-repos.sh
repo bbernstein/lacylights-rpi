@@ -345,12 +345,29 @@ update_repo() {
 
     # Download the release archive
     print_status "Downloading $repo_name $version_to_install..."
-    local download_url="https://github.com/$GITHUB_ORG/$repo_name/archive/refs/tags/$version_to_install.tar.gz"
+
+    # For lacylights-fe, download the pre-built static export artifact
+    # For other repos, download the source archive
+    local download_url
+    local strip_components=1
+    if [ "$repo_name" = "lacylights-fe" ]; then
+        # Download static export release asset (pre-built for RPi)
+        # Version format: strip 'v' prefix for asset name
+        local version_number="${version_to_install#v}"
+        download_url="https://github.com/$GITHUB_ORG/$repo_name/releases/download/$version_to_install/$repo_name-static-$version_number.tar.gz"
+        strip_components=1  # Archive has lacylights-fe-static/ prefix
+    else
+        # Download source archive for other repos
+        download_url="https://github.com/$GITHUB_ORG/$repo_name/archive/refs/tags/$version_to_install.tar.gz"
+        strip_components=1  # Archive has repo-name-version/ prefix
+    fi
+
     local archive_file="$temp_dir/${repo_name}.tar.gz"
 
     # Use -f flag to fail on HTTP errors (404, etc.)
     if ! curl -fsSL "$download_url" -o "$archive_file"; then
-        print_error "Failed to download $repo_name $version_to_install (check if version exists)"
+        print_error "Failed to download $repo_name $version_to_install from $download_url"
+        print_error "Check if version exists and release asset is available"
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     fi
@@ -371,7 +388,7 @@ update_repo() {
     # Extract to temporary location
     print_status "Extracting $repo_name..."
     mkdir -p "$temp_dir/extract"
-    if ! tar -xzf "$archive_file" -C "$temp_dir/extract" --strip-components=1; then
+    if ! tar -xzf "$archive_file" -C "$temp_dir/extract" --strip-components=$strip_components; then
         print_error "Failed to extract archive"
         rm -rf "$temp_dir" "$temp_backup"
         return 1
@@ -458,8 +475,11 @@ update_repo() {
 
     print_success "$repo_name extracted to $repo_dir"
 
-    # Install dependencies (all if build needed, production-only otherwise)
-    if [ -f "$repo_dir/package.json" ]; then
+    # Install dependencies and build (skip for pre-built frontend)
+    if [ "$repo_name" = "lacylights-fe" ]; then
+        # Frontend uses pre-built static export - no npm install or build needed
+        print_success "Using pre-built static export for $repo_name (no build required)"
+    elif [ -f "$repo_dir/package.json" ]; then
         print_status "Installing dependencies for $repo_name..."
         pushd "$repo_dir" >/dev/null
 
@@ -494,11 +514,9 @@ update_repo() {
 
         popd >/dev/null
         print_success "Dependencies installed for $repo_name"
-    fi
 
-    # Rebuild if necessary
-    if [ -f "$repo_dir/tsconfig.json" ] && [ -f "$repo_dir/package.json" ]; then
-        if grep -q '"build"' "$repo_dir/package.json"; then
+        # Rebuild if necessary
+        if [ -f "$repo_dir/tsconfig.json" ] && grep -q '"build"' "$repo_dir/package.json"; then
             print_status "Rebuilding $repo_name..."
             pushd "$repo_dir" >/dev/null
             if npm run build; then
