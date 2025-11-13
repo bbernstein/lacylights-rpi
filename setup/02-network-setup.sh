@@ -11,6 +11,10 @@
 
 set -e
 
+# Determine setup directory (one level up from this script)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SETUP_DIR="$(dirname "$SCRIPT_DIR")"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -120,14 +124,14 @@ print_info "Installing route priority dispatcher script..."
 sudo mkdir -p /etc/NetworkManager/dispatcher.d
 
 # Copy dispatcher script from setup directory
-if [ -f ~/lacylights-setup/config/networkmanager/dispatcher.d/99-route-priority ]; then
-    sudo cp ~/lacylights-setup/config/networkmanager/dispatcher.d/99-route-priority \
-        /etc/NetworkManager/dispatcher.d/99-route-priority
+DISPATCHER_SCRIPT="$SETUP_DIR/config/networkmanager/dispatcher.d/99-route-priority"
+if [ -f "$DISPATCHER_SCRIPT" ]; then
+    sudo cp "$DISPATCHER_SCRIPT" /etc/NetworkManager/dispatcher.d/99-route-priority
     sudo chmod +x /etc/NetworkManager/dispatcher.d/99-route-priority
     print_success "Route priority dispatcher installed"
     print_info "All WiFi connections will automatically have internet routing priority"
 else
-    print_error "Dispatcher script not found at ~/lacylights-setup/config/networkmanager/dispatcher.d/99-route-priority"
+    print_error "Dispatcher script not found at $DISPATCHER_SCRIPT"
     print_info "Route priority will need to be configured manually"
 fi
 
