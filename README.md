@@ -27,51 +27,92 @@ sudo apt-get update && sudo apt-get install -y ca-certificates curl
 Then use our one-command installer:
 
 ```bash
-# On your Raspberry Pi (SSH in first):
+# Method 1: Direct curl (recommended)
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
 
-# Then run the setup:
+# Method 2: If the above gives 404, use wget (may help with CDN caching issues)
+wget -qO- https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
+
+# Then run the setup scripts directly:
 cd ~/lacylights-setup
-./scripts/setup-new-pi.sh localhost
+sudo ./setup/01-system-setup.sh
+sudo ./setup/02-network-setup.sh
+sudo ./setup/03-database-setup.sh
+sudo ./setup/04-permissions-setup.sh
+sudo ./setup/05-service-install.sh
 ```
 
 **Having SSL certificate errors?** See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for solutions.
 
-**Or install remotely from your development machine:**
+**Getting 404 errors?** Try the git clone method below (most reliable).
 
+### Remote Installation (From Your Development Machine)
+
+If you want to install from your computer to a remote Pi, you can either:
+
+**Method 1: Using the cloned repository**
 ```bash
-# This will download, install, and set up everything on your Pi
+# From your development machine, after cloning this repo
+cd lacylights-rpi
+./scripts/setup-new-pi.sh pi@raspberrypi.local
+```
+
+**Method 2: Using the automated installer (no clone needed)**
+```bash
+# From your development machine
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | \
     bash -s -- latest pi@raspberrypi.local
-
-# Then complete the setup
-ssh pi@raspberrypi.local
-cd ~/lacylights-setup
-./scripts/setup-new-pi.sh localhost
 ```
 
 Then access your LacyLights at: **http://lacylights.local**
 
-### Alternative: Git Clone Method
+### Alternative Methods
 
-If you prefer to clone the repository for development:
+**Option A: Git clone (most reliable)**
+
+This method always works and doesn't depend on GitHub's CDN cache:
 
 ```bash
-# Clone this repository
+# First, update CA certificates
+sudo apt-get update && sudo apt-get install -y ca-certificates curl git
+
+# Clone repository
 git clone https://github.com/bbernstein/lacylights-rpi.git
 cd lacylights-rpi
 
-# Run complete setup (takes 15-20 minutes)
-./scripts/setup-new-pi.sh pi@raspberrypi.local
+# Run setup scripts directly (since you're already on the Pi)
+sudo ./setup/01-system-setup.sh
+sudo ./setup/02-network-setup.sh
+sudo ./setup/03-database-setup.sh
+sudo ./setup/04-permissions-setup.sh
+sudo ./setup/05-service-install.sh
+```
 
-# Or specify specific versions:
+**Option B: Direct download (if git not available)**
+
+```bash
+# Download and extract
+mkdir -p ~/lacylights-setup
+cd ~/lacylights-setup
+curl -fsSL https://github.com/bbernstein/lacylights-rpi/archive/refs/heads/main.tar.gz | tar xz --strip-components=1
+
+# Run setup scripts directly (since you're already on the Pi)
+sudo ./setup/01-system-setup.sh
+sudo ./setup/02-network-setup.sh
+sudo ./setup/03-database-setup.sh
+sudo ./setup/04-permissions-setup.sh
+sudo ./setup/05-service-install.sh
+```
+
+**For Development:** Specify specific component versions for remote setup (from your development machine):
+```bash
 ./scripts/setup-new-pi.sh pi@raspberrypi.local \
     --backend-version v1.1.0 \
     --frontend-version v0.2.0 \
     --mcp-version v1.0.0
 ```
 
-**Note:** The setup script downloads release archives directly from GitHub to the Pi (no git repositories created), so you don't need to have them cloned locally.
+Note: The setup scripts download specific versions automatically. If you're running setup directly on the Pi (not remotely), the setup scripts don't support version flags - they always use the latest from main.
 
 ### Deploying Updates
 
