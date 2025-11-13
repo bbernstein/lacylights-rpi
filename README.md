@@ -17,30 +17,68 @@ LacyLights is a complete stage lighting control system with:
 
 ## Quick Start
 
-### New Installation (One-Command Setup)
+### One-Command Installation (Recommended)
 
-**Fresh Raspberry Pi?** Update CA certificates first to avoid SSL errors:
+**For a fresh Raspberry Pi, run this single command directly on the Pi:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash && \
+    cd ~/lacylights-setup && \
+    sudo bash scripts/setup-local-pi.sh
+```
+
+That's it! This will:
+1. Download the setup tools
+2. Configure the system (hostname, packages, swap)
+3. Set up networking (ethernet + WiFi)
+4. Install and configure PostgreSQL
+5. Deploy LacyLights (backend, frontend, MCP server)
+6. Start the service
+
+After completion, access LacyLights at: **http://lacylights.local**
+
+**Prerequisites:** Fresh Raspberry Pi with internet connection. If you get SSL certificate errors:
 ```bash
 sudo apt-get update && sudo apt-get install -y ca-certificates curl
 ```
 
-Then use our one-command installer:
+See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for troubleshooting.
+
+### Options for Single-Command Setup
+
+The `setup-local-pi.sh` script supports several options:
 
 ```bash
-# Method 1: Direct curl (recommended)
-curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
+# Specify component versions
+sudo bash scripts/setup-local-pi.sh \
+    --backend-version v1.1.0 \
+    --frontend-version v0.2.0 \
+    --mcp-version v1.0.0
 
-# Method 2: If the above gives 404, use wget (GitHub CDN cache may need time to update)
-wget -qO- https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
+# Configure WiFi during setup
+sudo bash scripts/setup-local-pi.sh \
+    --wifi-ssid "MyNetwork" \
+    --wifi-password "mypassword"
 
-# Then run the setup:
-cd ~/lacylights-setup
-./scripts/setup-new-pi.sh localhost
+# Skip WiFi configuration prompts
+sudo bash scripts/setup-local-pi.sh --skip-wifi
 ```
 
-**Having SSL certificate errors?** See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for solutions.
+### Alternative: Git Clone Method
 
-**Getting 404 errors?** The file may be cached. Try the git clone method below or wait a few minutes for GitHub's CDN to update.
+If you prefer to clone the repository first:
+
+```bash
+# Update CA certificates and install git
+sudo apt-get update && sudo apt-get install -y ca-certificates curl git
+
+# Clone repository
+git clone https://github.com/bbernstein/lacylights-rpi.git
+cd lacylights-rpi
+
+# Run complete setup
+sudo bash scripts/setup-local-pi.sh
+```
 
 ### Remote Installation (From Your Development Machine)
 
