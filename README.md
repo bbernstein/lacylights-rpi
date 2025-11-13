@@ -19,100 +19,52 @@ LacyLights is a complete stage lighting control system with:
 
 ### New Installation (One-Command Setup)
 
-**Fresh Raspberry Pi?** Update CA certificates first to avoid SSL errors:
-```bash
-sudo apt-get update && sudo apt-get install -y ca-certificates curl
-```
-
-Then use our one-command installer:
+For a fresh Raspberry Pi, use our one-command installer:
 
 ```bash
-# Method 1: Direct curl (recommended)
+# On your Raspberry Pi (SSH in first):
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
 
-# Method 2: If the above gives 404, use wget (may help with CDN caching issues)
-wget -qO- https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
-
-# Then run the setup scripts directly:
+# Then run the setup:
 cd ~/lacylights-setup
-sudo ./setup/01-system-setup.sh
-sudo ./setup/02-network-setup.sh
-sudo ./setup/03-database-setup.sh
-sudo ./setup/04-permissions-setup.sh
-sudo ./setup/05-service-install.sh
+./scripts/setup-new-pi.sh localhost
 ```
 
-**Having SSL certificate errors?** See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for solutions.
+**Or install remotely from your development machine:**
 
-**Getting 404 errors?** Try the git clone method below (most reliable).
-
-### Remote Installation (From Your Development Machine)
-
-If you want to install from your computer to a remote Pi, you can either:
-
-**Method 1: Using the cloned repository**
 ```bash
-# From your development machine, after cloning this repo
-cd lacylights-rpi
-./scripts/setup-new-pi.sh pi@raspberrypi.local
-```
-
-**Method 2: Using the automated installer (no clone needed)**
-```bash
-# From your development machine
+# This will download, install, and set up everything on your Pi
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | \
     bash -s -- latest pi@raspberrypi.local
+
+# Then complete the setup
+ssh pi@raspberrypi.local
+cd ~/lacylights-setup
+./scripts/setup-new-pi.sh localhost
 ```
 
 Then access your LacyLights at: **http://lacylights.local**
 
-### Alternative Methods
+### Alternative: Git Clone Method
 
-**Option A: Git clone (most reliable)**
-
-This method always works and doesn't depend on GitHub's CDN cache:
+If you prefer to clone the repository for development:
 
 ```bash
-# First, update CA certificates
-sudo apt-get update && sudo apt-get install -y ca-certificates curl git
-
-# Clone repository
+# Clone this repository
 git clone https://github.com/bbernstein/lacylights-rpi.git
 cd lacylights-rpi
 
-# Run setup scripts directly (since you're already on the Pi)
-sudo ./setup/01-system-setup.sh
-sudo ./setup/02-network-setup.sh
-sudo ./setup/03-database-setup.sh
-sudo ./setup/04-permissions-setup.sh
-sudo ./setup/05-service-install.sh
-```
+# Run complete setup (takes 15-20 minutes)
+./scripts/setup-new-pi.sh pi@raspberrypi.local
 
-**Option B: Direct download (if git not available)**
-
-```bash
-# Download and extract
-mkdir -p ~/lacylights-setup
-cd ~/lacylights-setup
-curl -fsSL https://github.com/bbernstein/lacylights-rpi/archive/refs/heads/main.tar.gz | tar xz --strip-components=1
-
-# Run setup scripts directly (since you're already on the Pi)
-sudo ./setup/01-system-setup.sh
-sudo ./setup/02-network-setup.sh
-sudo ./setup/03-database-setup.sh
-sudo ./setup/04-permissions-setup.sh
-sudo ./setup/05-service-install.sh
-```
-
-**For Development:** Specify specific component versions for remote setup (from your development machine):
-```bash
+# Or specify specific versions:
 ./scripts/setup-new-pi.sh pi@raspberrypi.local \
     --backend-version v1.1.0 \
     --frontend-version v0.2.0 \
     --mcp-version v1.0.0
 ```
 
-Note: The setup scripts download specific versions automatically. If you're running setup directly on the Pi (not remotely), the setup scripts don't support version flags - they always use the latest from main.
+**Note:** The setup script downloads release archives directly from GitHub to the Pi (no git repositories created), so you don't need to have them cloned locally.
 
 ### Deploying Updates
 
@@ -208,22 +160,6 @@ Complete guides in `docs/`:
 - Raspberry Pi OS (64-bit, Lite or Desktop)
 - SSH enabled
 - Internet connection for initial setup
-- **Important**: Updated CA certificates (see [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md))
-
-**First-time setup checklist:**
-```bash
-# Update CA certificates to avoid SSL errors
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl
-
-# Verify system time is correct
-date
-
-# Test internet connectivity
-ping -c 3 google.com
-```
-
-See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for complete setup guide and troubleshooting.
 
 ### Software on Development Machine
 
@@ -570,23 +506,9 @@ This is a deployment repository. For application code contributions:
 
 For deployment tooling improvements, open an issue or PR in this repository.
 
-### For Maintainers: Creating Releases
-
-To create releases, you need to set up a `RELEASE_TOKEN` secret first:
-
-📖 **See [docs/RELEASE_TOKEN_SETUP.md](docs/RELEASE_TOKEN_SETUP.md) for setup instructions**
-
-Once configured, create releases via GitHub Actions:
-1. Go to Actions → Create Release
-2. Select version bump type (patch/minor/major)
-3. Run workflow
-
-See [docs/RELEASES.md](docs/RELEASES.md) for complete release management guide.
-
 ## Documentation
 
 - **Getting Started:**
-  - [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) - Prerequisites and common issues (read this first!)
   - [INITIAL_SETUP.md](docs/INITIAL_SETUP.md) - First-time setup
   - [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Deploying changes
 
@@ -598,7 +520,6 @@ See [docs/RELEASES.md](docs/RELEASES.md) for complete release management guide.
   - [UPDATING.md](docs/UPDATING.md) - System updates
   - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
   - [RELEASES.md](docs/RELEASES.md) - Creating and managing releases
-  - [RELEASE_TOKEN_SETUP.md](docs/RELEASE_TOKEN_SETUP.md) - Setting up release automation token (maintainers only)
 
 - **Scripts:**
   - [scripts/deploy.sh](scripts/deploy.sh) - Deployment script
