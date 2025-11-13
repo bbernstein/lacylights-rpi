@@ -27,8 +27,11 @@ sudo apt-get update && sudo apt-get install -y ca-certificates curl
 Then use our one-command installer:
 
 ```bash
-# On your Raspberry Pi (SSH in first):
+# Method 1: Direct curl (recommended)
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
+
+# Method 2: If the above gives 404, use wget (GitHub CDN cache may need time to update)
+wget -qO- https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
 
 # Then run the setup:
 cd ~/lacylights-setup
@@ -36,6 +39,8 @@ cd ~/lacylights-setup
 ```
 
 **Having SSL certificate errors?** See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for solutions.
+
+**Getting 404 errors?** The file may be cached. Try the git clone method below or wait a few minutes for GitHub's CDN to update.
 
 **Or install remotely from your development machine:**
 
@@ -52,26 +57,41 @@ cd ~/lacylights-setup
 
 Then access your LacyLights at: **http://lacylights.local**
 
-### Alternative: Git Clone Method
+### Alternative Methods
 
-If you prefer to clone the repository for development:
+**Option A: Git Clone (Most Reliable)**
+
+This method always works and doesn't depend on GitHub's CDN cache:
 
 ```bash
-# Clone this repository
+# First, update CA certificates
+sudo apt-get update && sudo apt-get install -y ca-certificates curl git
+
+# Clone and run
 git clone https://github.com/bbernstein/lacylights-rpi.git
 cd lacylights-rpi
+./scripts/setup-new-pi.sh localhost
+```
 
-# Run complete setup (takes 15-20 minutes)
-./scripts/setup-new-pi.sh pi@raspberrypi.local
+**Option B: Direct Download (If Git Not Available)**
 
-# Or specify specific versions:
-./scripts/setup-new-pi.sh pi@raspberrypi.local \
+```bash
+# Download and extract
+mkdir -p ~/lacylights-setup
+cd ~/lacylights-setup
+curl -fsSL https://github.com/bbernstein/lacylights-rpi/archive/refs/heads/main.tar.gz | tar xz --strip-components=1
+
+# Run setup
+./scripts/setup-new-pi.sh localhost
+```
+
+**For Development:** Specify specific component versions:
+```bash
+./scripts/setup-new-pi.sh localhost \
     --backend-version v1.1.0 \
     --frontend-version v0.2.0 \
     --mcp-version v1.0.0
 ```
-
-**Note:** The setup script downloads release archives directly from GitHub to the Pi (no git repositories created), so you don't need to have them cloned locally.
 
 ### Deploying Updates
 
