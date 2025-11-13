@@ -97,10 +97,13 @@ curl: (60) SSL certificate problem: self-signed certificate
    unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
    ```
 
-4. **Temporary workaround** (use with caution):
+4. **Alternative installation method** (if SSL issues persist after updating CA certificates and system time):
    ```bash
-   # Only if you trust the source and need to proceed immediately
-   curl -fsSL --insecure https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
+   # Use git clone to obtain the installation files directly:
+   git clone https://github.com/bbernstein/lacylights-rpi.git
+   # Then run the install script manually:
+   cd lacylights-rpi
+   bash install.sh
    ```
 
 ### No Internet Connection
@@ -295,13 +298,14 @@ cd lacylights-rpi
 
 ### Method 3: Offline Installation
 
-If your Pi has no internet:
+If your Pi has no internet, consider using a USB drive to transfer the release archive or use an ethernet connection for initial setup.
 
-1. Download the latest release archive on a computer with internet
-2. Transfer to Pi via USB drive or SCP
-3. Extract and run setup
-
-See [OFFLINE_INSTALLATION.md](OFFLINE_INSTALLATION.md) for details.
+You can download a release archive on a computer with internet:
+1. Go to https://github.com/bbernstein/lacylights-rpi/releases
+2. Download the latest `lacylights-rpi-*.tar.gz` file
+3. Transfer to Pi via USB drive or SCP
+4. Extract: `tar xzf lacylights-rpi-*.tar.gz -C ~/lacylights-setup`
+5. Run setup: `cd ~/lacylights-setup && ./scripts/setup-new-pi.sh localhost`
 
 ## Getting Help
 
