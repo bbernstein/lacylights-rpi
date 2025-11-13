@@ -16,6 +16,17 @@ The lacylights-rpi repository uses GitHub Actions to automate the release proces
 
 ## Creating a Release
 
+### Prerequisites
+
+**First-time setup**: You need to configure a `RELEASE_TOKEN` secret to allow the workflow to push to the protected main branch.
+
+📖 **See [RELEASE_TOKEN_SETUP.md](RELEASE_TOKEN_SETUP.md) for detailed setup instructions.**
+
+Quick summary:
+1. Create a fine-grained Personal Access Token with "Contents: Read and write" permission
+2. Add it as a repository secret named `RELEASE_TOKEN`
+3. The workflow will use it to bypass branch protection
+
 ### Via GitHub Actions (Recommended)
 
 1. Go to the [Actions tab](https://github.com/bbernstein/lacylights-rpi/actions)
@@ -30,7 +41,7 @@ The lacylights-rpi repository uses GitHub Actions to automate the release proces
 
 The workflow will automatically:
 - Calculate the new version (e.g., v0.1.0 → v0.1.1 for patch)
-- Create and push a git tag
+- Create and push a git tag (using RELEASE_TOKEN to bypass branch protection)
 - Build the release archive
 - Create the GitHub release with generated notes
 - Output an installation command
@@ -167,9 +178,15 @@ If the GitHub Actions workflow fails:
 
 1. **Check the workflow run** for error messages
 2. **Common issues**:
-   - Permission denied: Ensure RELEASE_TOKEN secret is set correctly
-   - Tag already exists: Delete the tag and retry
-   - Archive creation failed: Check that all required directories exist
+   - **Permission denied / refusing to allow a Personal Access Token**: Token needs workflow permission or is missing
+     - See [RELEASE_TOKEN_SETUP.md](RELEASE_TOKEN_SETUP.md) for setup instructions
+   - **Resource not accessible by integration**: RELEASE_TOKEN secret is not set or has insufficient permissions
+     - Verify token has "Contents: Read and write" permission
+     - Ensure secret is named exactly `RELEASE_TOKEN`
+   - **remote: Permission to push refused**: Token expired or was deleted
+     - Create a new token and update the secret
+   - **Tag already exists**: Delete the tag and retry
+   - **Archive creation failed**: Check that all required directories exist
 
 ### Tag Already Exists
 

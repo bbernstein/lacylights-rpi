@@ -107,8 +107,7 @@ jobs:
 
           # Copy all necessary files and directories
           cp -r scripts setup config systemd utils docs release-temp/
-          cp README.md LICENSE 2>/dev/null || true
-          cp VERSION release-temp/
+          cp README.md LICENSE VERSION release-temp/
 
           # Create tarball
           cd release-temp
