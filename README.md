@@ -30,34 +30,31 @@ Then use our one-command installer:
 # Method 1: Direct curl (recommended)
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
 
-# Method 2: If the above gives 404, use wget (may help with CDN caching issues)
+# Method 2: If the above gives 404, use wget (GitHub CDN cache may need time to update)
 wget -qO- https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
 
-# Then run the setup scripts directly:
+# Then run the setup:
 cd ~/lacylights-setup
-sudo ./setup/01-system-setup.sh
-sudo ./setup/02-network-setup.sh
-sudo ./setup/03-database-setup.sh
-sudo ./setup/04-permissions-setup.sh
-sudo ./setup/05-service-install.sh
+./scripts/setup-new-pi.sh localhost
 ```
 
 **Having SSL certificate errors?** See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for solutions.
 
-**Getting 404 errors?** Try the git clone method below (most reliable).
+**Getting 404 errors?** The file may be cached. Try the git clone method below or wait a few minutes for GitHub's CDN to update.
 
 ### Remote Installation (From Your Development Machine)
 
-If you want to install from your computer to a remote Pi, you can either:
+If you want to install from your computer to a remote Pi:
 
-**Method 1: Using the cloned repository**
 ```bash
-# From your development machine, after cloning this repo
-cd lacylights-rpi
+# From your development machine, run the setup script with the Pi's hostname
+# This script will SSH to the Pi and run all setup steps automatically
+cd lacylights-rpi  # Clone the repo on your machine first
 ./scripts/setup-new-pi.sh pi@raspberrypi.local
 ```
 
-**Method 2: Using the automated installer (no clone needed)**
+Or use the automated installer:
+
 ```bash
 # From your development machine
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | \
@@ -68,7 +65,7 @@ Then access your LacyLights at: **http://lacylights.local**
 
 ### Alternative Methods
 
-**Option A: Git clone (most reliable)**
+**Option A: Git Clone (Most Reliable)**
 
 This method always works and doesn't depend on GitHub's CDN cache:
 
@@ -88,7 +85,7 @@ sudo ./setup/04-permissions-setup.sh
 sudo ./setup/05-service-install.sh
 ```
 
-**Option B: Direct download (if git not available)**
+**Option B: Direct Download (If Git Not Available)**
 
 ```bash
 # Download and extract
@@ -104,15 +101,13 @@ sudo ./setup/04-permissions-setup.sh
 sudo ./setup/05-service-install.sh
 ```
 
-**For Development:** Specify specific component versions for remote setup (from your development machine):
+**For Development:** Specify specific component versions:
 ```bash
-./scripts/setup-new-pi.sh pi@raspberrypi.local \
+./scripts/setup-new-pi.sh localhost \
     --backend-version v1.1.0 \
     --frontend-version v0.2.0 \
     --mcp-version v1.0.0
 ```
-
-Note: The setup scripts download specific versions automatically. If you're running setup directly on the Pi (not remotely), the setup scripts don't support version flags - they always use the latest from main.
 
 ### Deploying Updates
 
