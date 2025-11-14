@@ -75,6 +75,10 @@ jobs:
 
       - name: Push version update and create tag
         run: |
+          # Get current branch name
+          CURRENT_BRANCH="${{ github.ref_name }}"
+          echo "Current branch: $CURRENT_BRANCH"
+
           # Push the commit and create tag with retry logic
           MAX_ATTEMPTS=3
           ATTEMPT=1
@@ -82,7 +86,7 @@ jobs:
           while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
             echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
 
-            if git push origin main && git tag ${{ steps.version.outputs.tag }} && git push origin ${{ steps.version.outputs.tag }}; then
+            if git push origin "$CURRENT_BRANCH" && git tag ${{ steps.version.outputs.tag }} && git push origin ${{ steps.version.outputs.tag }}; then
               echo "Successfully pushed version update and tag"
               exit 0
             else
