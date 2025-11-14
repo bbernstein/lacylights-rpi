@@ -235,9 +235,10 @@ chown -R pi:pi /opt/lacylights/frontend-src
 print_info "Installing frontend dependencies..."
 sudo -u pi npm ci
 
-# Build frontend
-print_info "Building frontend..."
-sudo -u pi npm run build
+# Build frontend for static export
+print_info "Building frontend for static export..."
+# Set environment variable to enable static export (Next.js checks this)
+sudo -u pi STATIC_EXPORT=true npm run build
 
 # Remove dev dependencies after build to save space
 print_info "Removing dev dependencies..."
