@@ -61,9 +61,20 @@ sudo usermod -a -G lacylights lacylights
 # Create application directories
 print_info "Creating application directories..."
 
-sudo mkdir -p /opt/lacylights/{backend,frontend-src,mcp}
+sudo mkdir -p /opt/lacylights/{backend,frontend-src,mcp,scripts,repos,backups,logs}
 sudo chown -R lacylights:lacylights /opt/lacylights
 sudo chmod -R 755 /opt/lacylights
+
+# Copy update-repos.sh script to /opt/lacylights/scripts/
+if [ -f "$REPO_DIR/scripts/update-repos.sh" ]; then
+    print_info "Installing version management script..."
+    sudo cp "$REPO_DIR/scripts/update-repos.sh" /opt/lacylights/scripts/
+    sudo chmod +x /opt/lacylights/scripts/update-repos.sh
+    sudo chown lacylights:lacylights /opt/lacylights/scripts/update-repos.sh
+    print_success "Version management script installed"
+else
+    print_error "Warning: update-repos.sh not found at $REPO_DIR/scripts/update-repos.sh"
+fi
 
 print_success "Application directories created"
 
@@ -95,4 +106,8 @@ print_info "Created:"
 print_info "  - User: lacylights (system user)"
 print_info "  - Group: lacylights"
 print_info "  - Directory: /opt/lacylights/"
+print_info "  - Scripts: /opt/lacylights/scripts/ (version management)"
+print_info "  - Repos: /opt/lacylights/repos/ (symlinks to backend/frontend/mcp)"
+print_info "  - Backups: /opt/lacylights/backups/ (for update rollbacks)"
+print_info "  - Logs: /opt/lacylights/logs/ (update logs)"
 print_info "  - Sudoers: /etc/sudoers.d/lacylights (WiFi management)"

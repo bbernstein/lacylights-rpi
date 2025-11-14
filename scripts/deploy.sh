@@ -412,6 +412,75 @@ if [ "$DEPLOY_MCP" = true ]; then
     print_success "MCP code and build artifacts synced"
 fi
 
+# Setup version management symlinks and files
+print_header "Setting Up Version Management"
+
+print_info "Creating symlinks for version management..."
+ssh "$PI_HOST" << 'ENDSSH'
+set -e
+
+# Create symlinks in /opt/lacylights/repos/
+if [ ! -L /opt/lacylights/repos/lacylights-node ]; then
+    echo "[INFO] Creating symlink: lacylights-node -> backend"
+    sudo ln -sf /opt/lacylights/backend /opt/lacylights/repos/lacylights-node
+fi
+
+if [ ! -L /opt/lacylights/repos/lacylights-fe ]; then
+    echo "[INFO] Creating symlink: lacylights-fe -> frontend-src"
+    sudo ln -sf /opt/lacylights/frontend-src /opt/lacylights/repos/lacylights-fe
+fi
+
+if [ ! -L /opt/lacylights/repos/lacylights-mcp ]; then
+    echo "[INFO] Creating symlink: lacylights-mcp -> mcp"
+    sudo ln -sf /opt/lacylights/mcp /opt/lacylights/repos/lacylights-mcp
+fi
+
+echo "[SUCCESS] Version management symlinks created"
+ENDSSH
+
+print_info "Creating version tracking files..."
+ssh "$PI_HOST" << 'ENDSSH'
+set -e
+
+# Function to get git version from a repository
+get_version() {
+    local repo_path=$1
+    cd "$repo_path"
+    # Try to get the most recent tag
+    version=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+    # If no tags found, try to get from package.json
+    if [ -z "$version" ] && [ -f "package.json" ]; then
+        version=$(grep '"version"' package.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+        if [ -n "$version" ]; then
+            version="v$version"
+        fi
+    fi
+
+    # Default to unknown if still empty
+    if [ -z "$version" ]; then
+        version="unknown"
+    fi
+
+    echo "$version"
+}
+
+# Create version files for each repository
+for repo in backend frontend-src mcp; do
+    version=$(get_version "/opt/lacylights/$repo")
+    echo "[INFO] Setting $repo version to $version"
+    echo "$version" | sudo -u lacylights tee "/opt/lacylights/$repo/.lacylights-version" > /dev/null
+done
+
+echo "[SUCCESS] Version tracking files created"
+ENDSSH
+
+if [ $? -eq 0 ]; then
+    print_success "Version management setup complete"
+else
+    print_warning "Version management setup had some issues (non-critical)"
+fi
+
 # Rebuild on Pi (optional, slower)
 if [ "$REBUILD_ON_PI" = true ]; then
     print_header "Rebuilding Projects on Raspberry Pi"
