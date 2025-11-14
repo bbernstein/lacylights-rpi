@@ -154,7 +154,7 @@ bash "$SETUP_DIR/setup/05-service-install.sh"
 print_header "Step 6/7: Deploying LacyLights Applications"
 
 # Create deployment directories
-mkdir -p /opt/lacylights/{backend,frontend,mcp}
+mkdir -p /opt/lacylights/{backend,frontend-src,mcp}
 
 # Function to get latest release tag from GitHub
 get_latest_release() {
@@ -221,7 +221,7 @@ print_success "Backend deployed successfully"
 
 # Deploy Frontend
 print_info "Deploying frontend ($FRONTEND_VERSION)..."
-cd /opt/lacylights/frontend
+cd /opt/lacylights/frontend-src
 if [ "$FRONTEND_VERSION" = "main" ]; then
     curl -fsSL "https://github.com/bbernstein/lacylights-fe/archive/refs/heads/main.tar.gz" | tar xz --strip-components=1
 else
@@ -229,7 +229,7 @@ else
 fi
 
 # Set ownership before installing dependencies
-chown -R pi:pi /opt/lacylights/frontend
+chown -R pi:pi /opt/lacylights/frontend-src
 
 # Install frontend dependencies (including dev dependencies for build)
 print_info "Installing frontend dependencies..."
