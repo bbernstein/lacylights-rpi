@@ -90,6 +90,18 @@ fi
 
 # Create symlink for frontend files
 print_info "Creating symlink for frontend files..."
+
+# Wait for frontend build to complete (check for out directory)
+MAX_WAIT=30
+WAITED=0
+while [ ! -d /opt/lacylights/frontend-src/out ] && [ $WAITED -lt $MAX_WAIT ]; do
+    if [ $WAITED -eq 0 ]; then
+        print_info "Waiting for frontend build to complete..."
+    fi
+    sleep 1
+    WAITED=$((WAITED + 1))
+done
+
 if [ -d /opt/lacylights/frontend-src/out ]; then
     # Remove old symlink/directory if exists
     if [ -L /opt/lacylights/frontend ]; then
@@ -101,10 +113,19 @@ if [ -d /opt/lacylights/frontend-src/out ]; then
 
     # Create symlink
     sudo ln -s /opt/lacylights/frontend-src/out /opt/lacylights/frontend
+
+    # Ensure nginx can read the files
+    sudo chmod -R 755 /opt/lacylights/frontend-src/out
+    sudo chown -R www-data:www-data /opt/lacylights/frontend
+
     print_success "Symlink created: /opt/lacylights/frontend -> /opt/lacylights/frontend-src/out"
+    print_info "Files in frontend directory:"
+    ls -la /opt/lacylights/frontend-src/out | head -10
 else
-    print_warning "Frontend build not found at /opt/lacylights/frontend-src/out"
-    print_info "Will create symlink after frontend is built"
+    print_error "Frontend build not found at /opt/lacylights/frontend-src/out after waiting ${WAITED}s"
+    print_error "Nginx will not be able to serve frontend files"
+    print_info "Check that the frontend was built successfully with: ls -la /opt/lacylights/frontend-src/"
+    exit 1
 fi
 
 # Test nginx configuration
