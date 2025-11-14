@@ -190,6 +190,9 @@ else
     curl -fsSL "https://github.com/bbernstein/lacylights-node/archive/refs/tags/${BACKEND_VERSION}.tar.gz" | tar xz --strip-components=1
 fi
 
+# Set ownership before installing dependencies
+chown -R pi:pi /opt/lacylights/backend
+
 # Install backend dependencies
 print_info "Installing backend dependencies..."
 sudo -u pi npm ci --omit=dev
@@ -221,6 +224,9 @@ else
     curl -fsSL "https://github.com/bbernstein/lacylights-fe/archive/refs/tags/${FRONTEND_VERSION}.tar.gz" | tar xz --strip-components=1
 fi
 
+# Set ownership before installing dependencies
+chown -R pi:pi /opt/lacylights/frontend
+
 # Install frontend dependencies
 print_info "Installing frontend dependencies..."
 sudo -u pi npm ci --omit=dev
@@ -239,6 +245,9 @@ if [ "$MCP_VERSION" = "main" ]; then
 else
     curl -fsSL "https://github.com/bbernstein/lacylights-mcp/archive/refs/tags/${MCP_VERSION}.tar.gz" | tar xz --strip-components=1
 fi
+
+# Set ownership before installing dependencies
+chown -R pi:pi /opt/lacylights/mcp
 
 # Install MCP dependencies
 print_info "Installing MCP dependencies..."
