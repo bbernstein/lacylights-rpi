@@ -131,27 +131,27 @@ print_info "This script will set up LacyLights on this Raspberry Pi"
 print_info "Setup directory: $SETUP_DIR"
 
 # Step 1: System Setup
-print_header "Step 1/6: System Setup"
+print_header "Step 1/7: System Setup"
 bash "$SETUP_DIR/setup/01-system-setup.sh"
 
 # Step 2: Network Setup
-print_header "Step 2/6: Network Setup"
+print_header "Step 2/7: Network Setup"
 bash "$SETUP_DIR/setup/02-network-setup.sh"
 
 # Step 3: Database Setup
-print_header "Step 3/6: Database Setup"
+print_header "Step 3/7: Database Setup"
 bash "$SETUP_DIR/setup/03-database-setup.sh"
 
 # Step 4: Permissions Setup
-print_header "Step 4/6: Permissions Setup"
+print_header "Step 4/7: Permissions Setup"
 bash "$SETUP_DIR/setup/04-permissions-setup.sh"
 
 # Step 5: Service Installation
-print_header "Step 5/6: Service Installation"
+print_header "Step 5/7: Service Installation"
 bash "$SETUP_DIR/setup/05-service-install.sh"
 
 # Step 6: Deploy LacyLights Applications
-print_header "Step 6/6: Deploying LacyLights Applications"
+print_header "Step 6/7: Deploying LacyLights Applications"
 
 # Create deployment directories
 mkdir -p /opt/lacylights/{backend,frontend,mcp}
@@ -286,6 +286,10 @@ if systemctl is-active --quiet lacylights; then
 else
     print_warning "Service may not have started correctly. Check logs with: sudo journalctl -u lacylights -n 50"
 fi
+
+# Step 7: Nginx Setup
+print_header "Step 7/7: Nginx Setup"
+bash "$SETUP_DIR/setup/06-nginx-setup.sh"
 
 print_header "Setup Complete!"
 print_success "LacyLights has been installed and started"
