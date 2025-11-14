@@ -193,13 +193,17 @@ fi
 # Set ownership before installing dependencies
 chown -R pi:pi /opt/lacylights/backend
 
-# Install backend dependencies
+# Install backend dependencies (including dev dependencies for build)
 print_info "Installing backend dependencies..."
-sudo -u pi npm ci --omit=dev
+sudo -u pi npm ci
 
 # Build backend
 print_info "Building backend..."
 sudo -u pi npm run build
+
+# Remove dev dependencies after build to save space
+print_info "Removing dev dependencies..."
+sudo -u pi npm prune --omit=dev
 
 # Copy environment file if it doesn't exist
 if [ ! -f /opt/lacylights/backend/.env ]; then
@@ -227,13 +231,17 @@ fi
 # Set ownership before installing dependencies
 chown -R pi:pi /opt/lacylights/frontend
 
-# Install frontend dependencies
+# Install frontend dependencies (including dev dependencies for build)
 print_info "Installing frontend dependencies..."
-sudo -u pi npm ci --omit=dev
+sudo -u pi npm ci
 
 # Build frontend
 print_info "Building frontend..."
 sudo -u pi npm run build
+
+# Remove dev dependencies after build to save space
+print_info "Removing dev dependencies..."
+sudo -u pi npm prune --omit=dev
 
 print_success "Frontend deployed successfully"
 
@@ -249,13 +257,17 @@ fi
 # Set ownership before installing dependencies
 chown -R pi:pi /opt/lacylights/mcp
 
-# Install MCP dependencies
+# Install MCP dependencies (including dev dependencies for build)
 print_info "Installing MCP dependencies..."
-sudo -u pi npm ci --omit=dev
+sudo -u pi npm ci
 
 # Build MCP
 print_info "Building MCP server..."
 sudo -u pi npm run build
+
+# Remove dev dependencies after build to save space
+print_info "Removing dev dependencies..."
+sudo -u pi npm prune --omit=dev
 
 print_success "MCP server deployed successfully"
 
