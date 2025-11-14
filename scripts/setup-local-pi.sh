@@ -235,14 +235,12 @@ chown -R pi:pi /opt/lacylights/frontend-src
 print_info "Installing frontend dependencies..."
 sudo -u pi npm ci
 
-# Build frontend for static export
-print_info "Building frontend for static export..."
-# Set environment variable to enable static export (Next.js checks this)
-sudo -u pi STATIC_EXPORT=true npm run build
+# Build frontend
+print_info "Building frontend..."
+# Build Next.js in server mode
+sudo -u pi bash -c 'NEXT_PUBLIC_GRAPHQL_ENDPOINT=http://lacylights.local/graphql npm run build'
 
-# Remove dev dependencies after build to save space
-print_info "Removing dev dependencies..."
-sudo -u pi npm prune --omit=dev
+# Note: We keep dependencies (not pruning) because Next.js server needs them to run
 
 print_success "Frontend deployed successfully"
 
@@ -275,17 +273,34 @@ print_success "MCP server deployed successfully"
 # Set correct ownership
 chown -R pi:pi /opt/lacylights
 
-# Start the service
-print_header "Starting LacyLights Service"
-systemctl start lacylights
-print_success "Service started"
+# Install and start frontend service
+print_header "Installing Frontend Service"
+print_info "Installing frontend systemd service..."
+cp "$SETUP_DIR/systemd/lacylights-frontend.service" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable lacylights-frontend
+systemctl start lacylights-frontend
+print_success "Frontend service installed and started"
 
-# Check service status
+# Check frontend service status
+sleep 2
+if systemctl is-active --quiet lacylights-frontend; then
+    print_success "Frontend service is running on port 3000"
+else
+    print_warning "Frontend service may not have started. Check logs with: sudo journalctl -u lacylights-frontend -n 50"
+fi
+
+# Start the backend service
+print_header "Starting LacyLights Backend Service"
+systemctl start lacylights
+print_success "Backend service started"
+
+# Check backend service status
 sleep 2
 if systemctl is-active --quiet lacylights; then
-    print_success "LacyLights service is running"
+    print_success "Backend service is running"
 else
-    print_warning "Service may not have started correctly. Check logs with: sudo journalctl -u lacylights -n 50"
+    print_warning "Backend service may not have started correctly. Check logs with: sudo journalctl -u lacylights -n 50"
 fi
 
 # Step 7: Nginx Setup

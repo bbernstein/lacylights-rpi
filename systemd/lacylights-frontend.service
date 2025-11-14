@@ -1,0 +1,23 @@
+[Unit]
+Description=LacyLights Frontend (Next.js Server)
+After=network.target
+Wants=lacylights.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/lacylights/frontend-src
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+Environment="NEXT_PUBLIC_GRAPHQL_ENDPOINT=http://lacylights.local/graphql"
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lacylights-frontend
+
+[Install]
+WantedBy=multi-user.target
