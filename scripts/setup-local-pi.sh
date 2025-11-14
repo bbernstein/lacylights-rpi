@@ -205,6 +205,10 @@ sudo -u pi npm run build
 print_info "Removing dev dependencies..."
 sudo -u pi npm prune --omit=dev
 
+# Create temp directory for fixture downloads
+print_info "Creating temp directory..."
+sudo -u pi mkdir -p /opt/lacylights/backend/temp
+
 # Copy environment file if it doesn't exist
 if [ ! -f /opt/lacylights/backend/.env ]; then
     if [ -f "$SETUP_DIR/config/.env.example" ]; then
@@ -271,7 +275,10 @@ sudo -u pi npm prune --omit=dev
 print_success "MCP server deployed successfully"
 
 # Set correct ownership
-chown -R pi:pi /opt/lacylights
+# Backend runs as lacylights user, frontend runs as pi user
+chown -R lacylights:lacylights /opt/lacylights/backend
+chown -R pi:pi /opt/lacylights/frontend-src
+chown -R pi:pi /opt/lacylights/mcp
 
 # Install and start frontend service
 print_header "Installing Frontend Service"
