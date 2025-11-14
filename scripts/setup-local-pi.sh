@@ -199,7 +199,7 @@ sudo -u pi npm ci
 
 # Build backend
 print_info "Building backend..."
-sudo -u pi npm run build
+sudo -u pi bash -c 'npm run build'
 
 # Remove dev dependencies after build to save space
 print_info "Removing dev dependencies..."
@@ -266,7 +266,7 @@ sudo -u pi npm ci
 
 # Build MCP
 print_info "Building MCP server..."
-sudo -u pi npm run build
+sudo -u pi bash -c 'npm run build'
 
 # Remove dev dependencies after build to save space
 print_info "Removing dev dependencies..."
