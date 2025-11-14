@@ -1,14 +1,9 @@
 # LacyLights nginx Configuration
-# Serves static frontend and proxies GraphQL/WebSocket to Node.js backend
+# Proxies frontend (Next.js server) and backend (GraphQL/WebSocket)
 
 server {
     listen 80;
     server_name lacylights.local localhost _;
-
-    # Root directory for static frontend files
-    # This is a symlink to /opt/lacylights/frontend-src/out/
-    root /opt/lacylights/frontend;
-    index index.html;
 
     # Logging
     access_log /var/log/nginx/lacylights-access.log;
@@ -68,42 +63,20 @@ server {
         proxy_send_timeout 86400s;
     }
 
-    # Static files with caching
-    location /_next/static/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # Explicitly handle index pages (must come before regex dynamic routes)
-    # This prevents try_files $uri/ from accidentally serving wrong files
-    location = /cue-lists/ {
-        try_files /cue-lists/index.html =404;
-    }
-
-    # Handle scene editor dynamic routes - serve placeholder HTML
-    # The client-side JavaScript will extract the actual scene ID from the URL
-    # Matches: /scenes/{sceneId}/edit or /scenes/{sceneId}/edit/
-    location ~* ^/scenes/[^/]+/edit/?$ {
-        try_files /scenes/__dynamic__/edit/index.html =404;
-    }
-
-    # Handle cue list detail dynamic routes - serve placeholder HTML
-    # The client-side JavaScript will extract the actual cue list ID from the URL
-    # Matches: /cue-lists/{id} or /cue-lists/{id}/
-    location ~* ^/cue-lists/[^/]+/?$ {
-        try_files /cue-lists/__dynamic__/index.html =404;
-    }
-
-    # Handle player dynamic routes - serve placeholder HTML
-    # The client-side JavaScript will extract the actual cue list ID from the URL
-    # Matches: /player/{cueListId} or /player/{cueListId}/
-    location ~* ^/player/[^/]+/?$ {
-        try_files /player/__dynamic__/index.html =404;
-    }
-
-    # Main SPA routing - serve index.html for all other routes
+    # Proxy all other requests to Next.js server on port 3000
     location / {
-        try_files $uri $uri/ $uri.html /index.html;
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Timeouts
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
     }
 
     # Security headers

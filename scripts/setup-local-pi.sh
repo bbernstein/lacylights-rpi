@@ -131,30 +131,30 @@ print_info "This script will set up LacyLights on this Raspberry Pi"
 print_info "Setup directory: $SETUP_DIR"
 
 # Step 1: System Setup
-print_header "Step 1/6: System Setup"
+print_header "Step 1/7: System Setup"
 bash "$SETUP_DIR/setup/01-system-setup.sh"
 
 # Step 2: Network Setup
-print_header "Step 2/6: Network Setup"
+print_header "Step 2/7: Network Setup"
 bash "$SETUP_DIR/setup/02-network-setup.sh"
 
 # Step 3: Database Setup
-print_header "Step 3/6: Database Setup"
+print_header "Step 3/7: Database Setup"
 bash "$SETUP_DIR/setup/03-database-setup.sh"
 
 # Step 4: Permissions Setup
-print_header "Step 4/6: Permissions Setup"
+print_header "Step 4/7: Permissions Setup"
 bash "$SETUP_DIR/setup/04-permissions-setup.sh"
 
 # Step 5: Service Installation
-print_header "Step 5/6: Service Installation"
+print_header "Step 5/7: Service Installation"
 bash "$SETUP_DIR/setup/05-service-install.sh"
 
 # Step 6: Deploy LacyLights Applications
-print_header "Step 6/6: Deploying LacyLights Applications"
+print_header "Step 6/7: Deploying LacyLights Applications"
 
 # Create deployment directories
-mkdir -p /opt/lacylights/{backend,frontend,mcp}
+mkdir -p /opt/lacylights/{backend,frontend-src,mcp}
 
 # Function to get latest release tag from GitHub
 get_latest_release() {
@@ -193,13 +193,21 @@ fi
 # Set ownership before installing dependencies
 chown -R pi:pi /opt/lacylights/backend
 
-# Install backend dependencies
+# Install backend dependencies (including dev dependencies for build)
 print_info "Installing backend dependencies..."
-sudo -u pi npm ci --omit=dev
+sudo -u pi npm ci
 
 # Build backend
 print_info "Building backend..."
 sudo -u pi npm run build
+
+# Remove dev dependencies after build to save space
+print_info "Removing dev dependencies..."
+sudo -u pi npm prune --omit=dev
+
+# Create temp directory for fixture downloads
+print_info "Creating temp directory..."
+sudo -u pi mkdir -p /opt/lacylights/backend/temp
 
 # Copy environment file if it doesn't exist
 if [ ! -f /opt/lacylights/backend/.env ]; then
@@ -217,7 +225,7 @@ print_success "Backend deployed successfully"
 
 # Deploy Frontend
 print_info "Deploying frontend ($FRONTEND_VERSION)..."
-cd /opt/lacylights/frontend
+cd /opt/lacylights/frontend-src
 if [ "$FRONTEND_VERSION" = "main" ]; then
     curl -fsSL "https://github.com/bbernstein/lacylights-fe/archive/refs/heads/main.tar.gz" | tar xz --strip-components=1
 else
@@ -225,15 +233,18 @@ else
 fi
 
 # Set ownership before installing dependencies
-chown -R pi:pi /opt/lacylights/frontend
+chown -R pi:pi /opt/lacylights/frontend-src
 
-# Install frontend dependencies
+# Install frontend dependencies (including dev dependencies for build)
 print_info "Installing frontend dependencies..."
-sudo -u pi npm ci --omit=dev
+sudo -u pi npm ci
 
 # Build frontend
 print_info "Building frontend..."
-sudo -u pi npm run build
+# Build Next.js in server mode
+sudo -u pi bash -c 'NEXT_PUBLIC_GRAPHQL_ENDPOINT=http://lacylights.local/graphql npm run build'
+
+# Note: We keep dependencies (not pruning) because Next.js server needs them to run
 
 print_success "Frontend deployed successfully"
 
@@ -249,31 +260,59 @@ fi
 # Set ownership before installing dependencies
 chown -R pi:pi /opt/lacylights/mcp
 
-# Install MCP dependencies
+# Install MCP dependencies (including dev dependencies for build)
 print_info "Installing MCP dependencies..."
-sudo -u pi npm ci --omit=dev
+sudo -u pi npm ci
 
 # Build MCP
 print_info "Building MCP server..."
 sudo -u pi npm run build
 
+# Remove dev dependencies after build to save space
+print_info "Removing dev dependencies..."
+sudo -u pi npm prune --omit=dev
+
 print_success "MCP server deployed successfully"
 
 # Set correct ownership
-chown -R pi:pi /opt/lacylights
+# Backend runs as lacylights user, frontend runs as pi user
+chown -R lacylights:lacylights /opt/lacylights/backend
+chown -R pi:pi /opt/lacylights/frontend-src
+chown -R pi:pi /opt/lacylights/mcp
 
-# Start the service
-print_header "Starting LacyLights Service"
+# Install and start frontend service
+print_header "Installing Frontend Service"
+print_info "Installing frontend systemd service..."
+cp "$SETUP_DIR/systemd/lacylights-frontend.service" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable lacylights-frontend
+systemctl start lacylights-frontend
+print_success "Frontend service installed and started"
+
+# Check frontend service status
+sleep 2
+if systemctl is-active --quiet lacylights-frontend; then
+    print_success "Frontend service is running on port 3000"
+else
+    print_warning "Frontend service may not have started. Check logs with: sudo journalctl -u lacylights-frontend -n 50"
+fi
+
+# Start the backend service
+print_header "Starting LacyLights Backend Service"
 systemctl start lacylights
-print_success "Service started"
+print_success "Backend service started"
 
-# Check service status
+# Check backend service status
 sleep 2
 if systemctl is-active --quiet lacylights; then
-    print_success "LacyLights service is running"
+    print_success "Backend service is running"
 else
-    print_warning "Service may not have started correctly. Check logs with: sudo journalctl -u lacylights -n 50"
+    print_warning "Backend service may not have started correctly. Check logs with: sudo journalctl -u lacylights -n 50"
 fi
+
+# Step 7: Nginx Setup
+print_header "Step 7/7: Nginx Setup"
+bash "$SETUP_DIR/setup/06-nginx-setup.sh"
 
 print_header "Setup Complete!"
 print_success "LacyLights has been installed and started"

@@ -88,23 +88,15 @@ else
     print_success "LacyLights site already enabled"
 fi
 
-# Create symlink for frontend files
-print_info "Creating symlink for frontend files..."
-if [ -d /opt/lacylights/frontend-src/out ]; then
-    # Remove old symlink/directory if exists
-    if [ -L /opt/lacylights/frontend ]; then
-        sudo rm /opt/lacylights/frontend
-    elif [ -d /opt/lacylights/frontend ]; then
-        print_warning "Directory /opt/lacylights/frontend exists, removing..."
-        sudo rm -rf /opt/lacylights/frontend
-    fi
-
-    # Create symlink
-    sudo ln -s /opt/lacylights/frontend-src/out /opt/lacylights/frontend
-    print_success "Symlink created: /opt/lacylights/frontend -> /opt/lacylights/frontend-src/out"
+# Verify frontend service is running (nginx proxies to it)
+print_info "Verifying frontend service..."
+if systemctl is-active --quiet lacylights-frontend; then
+    print_success "Frontend service is running on port 3000"
+    print_info "Nginx will proxy requests to Next.js server"
 else
-    print_warning "Frontend build not found at /opt/lacylights/frontend-src/out"
-    print_info "Will create symlink after frontend is built"
+    print_warning "Frontend service is not running yet"
+    print_info "Nginx is configured to proxy to port 3000"
+    print_info "Start it with: sudo systemctl start lacylights-frontend"
 fi
 
 # Test nginx configuration
