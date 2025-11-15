@@ -278,7 +278,7 @@ chown -R pi:pi /opt/lacylights/mcp
 
 # Run database migrations (after ownership change)
 print_info "Running database migrations..."
-sudo -u lacylights bash -c 'cd /opt/lacylights/backend && npx prisma migrate deploy'
+sudo -u lacylights bash -c 'cd /opt/lacylights/backend && export PATH="./node_modules/.bin:$PATH" && npx prisma migrate deploy'
 print_success "Database migrations completed"
 
 # Install and start frontend service
