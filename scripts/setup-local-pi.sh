@@ -217,10 +217,6 @@ if [ ! -f /opt/lacylights/backend/.env ]; then
     fi
 fi
 
-# Run database migrations
-print_info "Running database migrations..."
-sudo -u pi npx prisma migrate deploy
-
 print_success "Backend deployed successfully"
 
 # Deploy Frontend
@@ -279,6 +275,11 @@ print_success "MCP server deployed successfully"
 chown -R lacylights:lacylights /opt/lacylights/backend
 chown -R pi:pi /opt/lacylights/frontend-src
 chown -R pi:pi /opt/lacylights/mcp
+
+# Run database migrations (after ownership change)
+print_info "Running database migrations..."
+sudo -u lacylights bash -c 'cd /opt/lacylights/backend && npx prisma migrate deploy'
+print_success "Database migrations completed"
 
 # Install and start frontend service
 print_header "Installing Frontend Service"
