@@ -157,9 +157,41 @@ print_header "Step 6/7: Deploying LacyLights Applications"
 mkdir -p /opt/lacylights/{backend,frontend-src,mcp}
 
 # Function to get latest release tag from GitHub
+# Helper function to extract version from URL or HTML
+# Uses strict semver pattern: v[MAJOR].[MINOR].[PATCH]
+extract_version_from_text() {
+    echo "$1" | grep -oE 'tag/v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/tag\///'
+}
+
 get_latest_release() {
     local repo=$1
-    curl -fsSL "https://api.github.com/repos/bbernstein/${repo}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "main"
+    local version=""
+
+    # Try GitHub API first (may hit rate limits)
+    local release_data=$(curl -fsSL "https://api.github.com/repos/bbernstein/${repo}/releases/latest" 2>/dev/null || echo "")
+
+    if [ -n "$release_data" ]; then
+        version=$(echo "$release_data" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    fi
+
+    # Fallback: Try to get latest release from GitHub releases page
+    if [ -z "$version" ]; then
+        local page_html=$(curl -fsSL "https://github.com/bbernstein/${repo}/releases/latest" 2>/dev/null || echo "")
+        version=$(extract_version_from_text "$page_html")
+    fi
+
+    # Fallback: Use redirect location header
+    if [ -z "$version" ]; then
+        local redirect_url=$(curl -fsSLI "https://github.com/bbernstein/${repo}/releases/latest" 2>/dev/null | grep -i '^location:' || echo "")
+        version=$(extract_version_from_text "$redirect_url")
+    fi
+
+    # Default to main if all methods fail
+    if [ -z "$version" ]; then
+        echo "main"
+    else
+        echo "$version"
+    fi
 }
 
 # Determine versions to deploy
