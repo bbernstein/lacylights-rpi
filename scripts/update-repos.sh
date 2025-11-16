@@ -63,44 +63,60 @@ get_installed_version() {
     fi
 }
 
+# Helper function to extract version from URL or HTML
+# Uses strict semver pattern: v[MAJOR].[MINOR].[PATCH]
+extract_version_from_text() {
+    echo "$1" | grep -oE 'tag/v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/tag\///'
+}
+
 # Function to get the latest release version from GitHub
 get_latest_release_version() {
     local repo="$1"
     local api_url="https://api.github.com/repos/$GITHUB_ORG/$repo/releases/latest"
+    local version=""
 
+    # Method 1: Try GitHub API first (may hit rate limits)
     if command_exists jq; then
         local response_file
         response_file=$(mktemp) || {
-            echo "unknown"
-            return
+            # Continue to fallback methods
+            version=""
         }
 
-        local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$api_url")
+        if [ -n "$response_file" ]; then
+            local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$api_url" 2>/dev/null)
 
-        # Check for 2xx success codes
-        if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            # Check for 2xx success codes
+            if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+                version=$(jq -r '.tag_name // empty' "$response_file" 2>/dev/null)
+                if [ "$version" = "null" ]; then
+                    version=""
+                fi
+            fi
             rm -f "$response_file"
-            echo "unknown"
-            return
-        fi
-
-        local version=$(jq -r '.tag_name // empty' "$response_file")
-        rm -f "$response_file"
-
-        if [ -z "$version" ] || [ "$version" = "null" ]; then
-            echo "unknown"
-        else
-            echo "$version"
         fi
     else
         # Fallback to grep/cut if jq not available
-        local version=$(curl -s "$api_url" | grep '"tag_name"' | cut -d '"' -f 4)
-        if [ -z "$version" ]; then
-            print_warning "Failed to detect latest version for $repo" >&2
-            echo "unknown"
-        else
-            echo "$version"
-        fi
+        version=$(curl -s "$api_url" 2>/dev/null | grep '"tag_name"' | cut -d '"' -f 4)
+    fi
+
+    # Method 2: Try scraping releases page HTML
+    if [ -z "$version" ]; then
+        local page_html=$(curl -fsSL "https://github.com/$GITHUB_ORG/$repo/releases/latest" 2>/dev/null || echo "")
+        version=$(extract_version_from_text "$page_html")
+    fi
+
+    # Method 3: Try redirect location header
+    if [ -z "$version" ]; then
+        local redirect_url=$(curl -fsSLI "https://github.com/$GITHUB_ORG/$repo/releases/latest" 2>/dev/null | grep -i '^location:' || echo "")
+        version=$(extract_version_from_text "$redirect_url")
+    fi
+
+    # Return version or "unknown" if all methods failed
+    if [ -z "$version" ]; then
+        echo "unknown"
+    else
+        echo "$version"
     fi
 }
 
