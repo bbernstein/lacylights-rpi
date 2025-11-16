@@ -281,6 +281,68 @@ print_info "Running database migrations..."
 sudo -u lacylights bash -c 'cd /opt/lacylights/backend && export PATH="./node_modules/.bin:$PATH" && npx prisma migrate deploy'
 print_success "Database migrations completed"
 
+# Setup version management symlinks
+print_header "Setting Up Version Management"
+print_info "Creating symlinks for version management..."
+
+# Create symlinks in /opt/lacylights/repos/
+if [ ! -L /opt/lacylights/repos/lacylights-node ]; then
+    print_info "Creating symlink: lacylights-node -> backend"
+    ln -sf /opt/lacylights/backend /opt/lacylights/repos/lacylights-node
+fi
+
+if [ ! -L /opt/lacylights/repos/lacylights-fe ]; then
+    print_info "Creating symlink: lacylights-fe -> frontend-src"
+    ln -sf /opt/lacylights/frontend-src /opt/lacylights/repos/lacylights-fe
+fi
+
+if [ ! -L /opt/lacylights/repos/lacylights-mcp ]; then
+    print_info "Creating symlink: lacylights-mcp -> mcp"
+    ln -sf /opt/lacylights/mcp /opt/lacylights/repos/lacylights-mcp
+fi
+
+print_success "Version management symlinks created"
+
+# Create version tracking files
+print_info "Creating version tracking files..."
+
+# Extract version from package.json with error handling and fallback
+if [ -f /opt/lacylights/backend/package.json ]; then
+    BACKEND_PKG_VERSION=$(grep '"version"' /opt/lacylights/backend/package.json | head -1 | sed 's/.*"version": "\(.*\)".*/v\1/')
+    if [ -z "$BACKEND_PKG_VERSION" ] || [ "$BACKEND_PKG_VERSION" = "v" ]; then
+        BACKEND_PKG_VERSION="unknown"
+    fi
+else
+    BACKEND_PKG_VERSION="unknown"
+fi
+
+if [ -f /opt/lacylights/frontend-src/package.json ]; then
+    FRONTEND_PKG_VERSION=$(grep '"version"' /opt/lacylights/frontend-src/package.json | head -1 | sed 's/.*"version": "\(.*\)".*/v\1/')
+    if [ -z "$FRONTEND_PKG_VERSION" ] || [ "$FRONTEND_PKG_VERSION" = "v" ]; then
+        FRONTEND_PKG_VERSION="unknown"
+    fi
+else
+    FRONTEND_PKG_VERSION="unknown"
+fi
+
+if [ -f /opt/lacylights/mcp/package.json ]; then
+    MCP_PKG_VERSION=$(grep '"version"' /opt/lacylights/mcp/package.json | head -1 | sed 's/.*"version": "\(.*\)".*/v\1/')
+    if [ -z "$MCP_PKG_VERSION" ] || [ "$MCP_PKG_VERSION" = "v" ]; then
+        MCP_PKG_VERSION="unknown"
+    fi
+else
+    MCP_PKG_VERSION="unknown"
+fi
+
+# Create .lacylights-version files with proper user context (consistent with deploy.sh)
+# All version files are owned by lacylights user to match deploy.sh behavior
+sudo -u lacylights bash -c "echo '$BACKEND_PKG_VERSION' > /opt/lacylights/backend/.lacylights-version"
+sudo -u lacylights bash -c "echo '$FRONTEND_PKG_VERSION' > /opt/lacylights/frontend-src/.lacylights-version"
+sudo -u lacylights bash -c "echo '$MCP_PKG_VERSION' > /opt/lacylights/mcp/.lacylights-version"
+
+print_info "Installed versions: Backend=$BACKEND_PKG_VERSION, Frontend=$FRONTEND_PKG_VERSION, MCP=$MCP_PKG_VERSION"
+print_success "Version tracking files created"
+
 # Install and start frontend service
 print_header "Installing Frontend Service"
 print_info "Installing frontend systemd service..."
