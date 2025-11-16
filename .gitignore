@@ -11,6 +11,9 @@ cache/
 dist/
 build/
 
+# Extracted release directories (e.g., lacylights-rpi-0.0.8/)
+lacylights-rpi-*/
+
 # Log files
 *.log
 logs/
