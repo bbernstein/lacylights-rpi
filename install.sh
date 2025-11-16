@@ -177,28 +177,32 @@ extract_version_from_text() {
 if [ "$VERSION" = "latest" ]; then
     print_info "Fetching latest release information..."
 
+    # Initialize to empty to track if we successfully got a version
+    DETECTED_VERSION=""
+
     # Try GitHub API first (may hit rate limits)
     RELEASE_DATA=$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases/latest" 2>/dev/null || echo "")
 
     if [ -n "$RELEASE_DATA" ]; then
-        VERSION=$(echo "$RELEASE_DATA" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        DETECTED_VERSION=$(echo "$RELEASE_DATA" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     fi
 
     # Fallback: Try to get latest release from GitHub releases page
-    if [ -z "$VERSION" ]; then
+    if [ -z "$DETECTED_VERSION" ]; then
         print_warning "GitHub API failed, trying alternative method..."
         PAGE_HTML=$(curl -fsSL "https://github.com/$GITHUB_REPO/releases/latest" 2>/dev/null || echo "")
-        VERSION=$(extract_version_from_text "$PAGE_HTML")
+        DETECTED_VERSION=$(extract_version_from_text "$PAGE_HTML")
     fi
 
     # Fallback: Use redirect location header
-    if [ -z "$VERSION" ]; then
+    if [ -z "$DETECTED_VERSION" ]; then
         print_warning "Trying redirect method..."
         REDIRECT_URL=$(curl -fsSLI "https://github.com/$GITHUB_REPO/releases/latest" 2>/dev/null | grep -i '^location:' || echo "")
-        VERSION=$(extract_version_from_text "$REDIRECT_URL")
+        DETECTED_VERSION=$(extract_version_from_text "$REDIRECT_URL")
     fi
 
-    if [ -z "$VERSION" ]; then
+    # Check if we successfully detected a version
+    if [ -z "$DETECTED_VERSION" ]; then
         print_error "Failed to fetch latest release version"
         print_error ""
         print_error "This may be due to GitHub API rate limiting or network issues."
@@ -212,6 +216,8 @@ if [ "$VERSION" = "latest" ]; then
         exit 1
     fi
 
+    # Set VERSION to the detected version
+    VERSION="$DETECTED_VERSION"
     print_success "Latest version: $VERSION"
 fi
 
