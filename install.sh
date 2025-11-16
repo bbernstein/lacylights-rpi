@@ -167,15 +167,48 @@ for cmd in curl tar; do
 done
 print_success "All required tools present"
 
+# Helper function to extract version from URL or HTML
+# Uses strict semver pattern: v[MAJOR].[MINOR].[PATCH]
+extract_version_from_text() {
+    echo "$1" | grep -oE 'tag/v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/tag\///'
+}
+
 # Determine download URL
 if [ "$VERSION" = "latest" ]; then
     print_info "Fetching latest release information..."
-    RELEASE_DATA=$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases/latest")
-    VERSION=$(echo "$RELEASE_DATA" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+    # Try GitHub API first (may hit rate limits)
+    RELEASE_DATA=$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases/latest" 2>/dev/null || echo "")
+
+    if [ -n "$RELEASE_DATA" ]; then
+        VERSION=$(echo "$RELEASE_DATA" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    fi
+
+    # Fallback: Try to get latest release from GitHub releases page
+    if [ -z "$VERSION" ]; then
+        print_warning "GitHub API failed, trying alternative method..."
+        PAGE_HTML=$(curl -fsSL "https://github.com/$GITHUB_REPO/releases/latest" 2>/dev/null || echo "")
+        VERSION=$(extract_version_from_text "$PAGE_HTML")
+    fi
+
+    # Fallback: Use redirect location header
+    if [ -z "$VERSION" ]; then
+        print_warning "Trying redirect method..."
+        REDIRECT_URL=$(curl -fsSLI "https://github.com/$GITHUB_REPO/releases/latest" 2>/dev/null | grep -i '^location:' || echo "")
+        VERSION=$(extract_version_from_text "$REDIRECT_URL")
+    fi
 
     if [ -z "$VERSION" ]; then
         print_error "Failed to fetch latest release version"
-        print_error "Please specify a version explicitly"
+        print_error ""
+        print_error "This may be due to GitHub API rate limiting or network issues."
+        print_error "Please try one of the following:"
+        print_error "  1. Wait a few minutes and try again"
+        print_error "  2. Specify a version explicitly (e.g., v0.0.11)"
+        print_error "  3. Check available versions: https://github.com/$GITHUB_REPO/releases"
+        print_error ""
+        print_error "Example with specific version:"
+        print_error "  curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPO/main/install.sh | bash -s -- v0.0.11"
         exit 1
     fi
 
