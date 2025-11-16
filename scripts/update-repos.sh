@@ -368,9 +368,8 @@ update_repo() {
     local strip_components=1
     if [ "$repo_name" = "lacylights-fe" ]; then
         # Download static export release asset (pre-built for RPi)
-        # Version format: strip 'v' prefix for asset name
-        local version_number="${version_to_install#v}"
-        download_url="https://github.com/$GITHUB_ORG/$repo_name/releases/download/$version_to_install/$repo_name-static-$version_number.tar.gz"
+        # Asset filename includes 'v' prefix: lacylights-fe-static-v0.5.6.tar.gz
+        download_url="https://github.com/$GITHUB_ORG/$repo_name/releases/download/$version_to_install/$repo_name-static-$version_to_install.tar.gz"
         strip_components=1  # Archive has lacylights-fe-static/ prefix
     else
         # Download source archive for other repos
