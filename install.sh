@@ -38,6 +38,7 @@ print_header() {
 
 # Default values
 GITHUB_REPO="bbernstein/lacylights-rpi"
+DIST_BASE_URL="https://dist.lacylights.com/releases/rpi"
 VERSION="${1:-latest}"
 INSTALL_DIR="$HOME/lacylights-setup"
 PI_HOST="${2:-}"
@@ -167,65 +168,48 @@ for cmd in curl tar; do
 done
 print_success "All required tools present"
 
-# Helper function to extract version from URL or HTML
-# Uses strict semver pattern: v[MAJOR].[MINOR].[PATCH]
-extract_version_from_text() {
-    echo "$1" | grep -oE 'tag/v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/tag\///'
-}
-
-# Determine download URL
+# Determine download URL and checksum
 if [ "$VERSION" = "latest" ]; then
-    print_info "Fetching latest release information..."
+    print_info "Fetching latest release information from distribution server..."
 
-    # Initialize to empty to track if we successfully got a version
-    DETECTED_VERSION=""
+    # Fetch latest.json from AWS distribution
+    LATEST_JSON=$(curl -fsSL "$DIST_BASE_URL/latest.json" 2>/dev/null || echo "")
 
-    # Try GitHub API first (may hit rate limits)
-    RELEASE_DATA=$(curl -fsSL "https://api.github.com/repos/$GITHUB_REPO/releases/latest" 2>/dev/null || echo "")
-
-    if [ -n "$RELEASE_DATA" ]; then
-        DETECTED_VERSION=$(echo "$RELEASE_DATA" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    fi
-
-    # Fallback: Try to get latest release from GitHub releases page
-    if [ -z "$DETECTED_VERSION" ]; then
-        print_warning "GitHub API failed, trying alternative method..."
-        PAGE_HTML=$(curl -fsSL "https://github.com/$GITHUB_REPO/releases/latest" 2>/dev/null || echo "")
-        DETECTED_VERSION=$(extract_version_from_text "$PAGE_HTML")
-    fi
-
-    # Fallback: Use redirect location header
-    if [ -z "$DETECTED_VERSION" ]; then
-        print_warning "Trying redirect method..."
-        REDIRECT_URL=$(curl -fsSLI "https://github.com/$GITHUB_REPO/releases/latest" 2>/dev/null | grep -i '^location:' || echo "")
-        DETECTED_VERSION=$(extract_version_from_text "$REDIRECT_URL")
-    fi
-
-    # Check if we successfully detected a version
-    if [ -z "$DETECTED_VERSION" ]; then
-        print_error "Failed to fetch latest release version"
+    if [ -z "$LATEST_JSON" ]; then
+        print_error "Failed to fetch latest release metadata"
+        print_error "URL: $DIST_BASE_URL/latest.json"
         print_error ""
-        print_error "This may be due to GitHub API rate limiting or network issues."
+        print_error "This may be due to network issues or server problems."
         print_error "Please try one of the following:"
-        print_error "  1. Wait a few minutes and try again"
-        print_error "  2. Specify a version explicitly (e.g., v0.0.11)"
-        print_error "  3. Check available versions: https://github.com/$GITHUB_REPO/releases"
+        print_error "  1. Check your internet connection"
+        print_error "  2. Try again in a few moments"
+        print_error "  3. Specify a version explicitly (e.g., v0.1.1)"
         print_error ""
         print_error "Example with specific version:"
-        print_error "  curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPO/main/install.sh | bash -s -- v0.0.11"
+        print_error "  curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPO/main/install.sh | bash -s -- v0.1.1"
         exit 1
     fi
 
-    # Set VERSION to the detected version
-    VERSION="$DETECTED_VERSION"
+    # Parse JSON to extract version and URL
+    VERSION=$(echo "$LATEST_JSON" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+    DOWNLOAD_URL=$(echo "$LATEST_JSON" | grep -o '"url"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+    EXPECTED_SHA256=$(echo "$LATEST_JSON" | grep -o '"sha256"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+
+    if [ -z "$VERSION" ] || [ -z "$DOWNLOAD_URL" ]; then
+        print_error "Failed to parse release metadata"
+        print_error "The latest.json file may be malformed"
+        exit 1
+    fi
+
     print_success "Latest version: $VERSION"
+    print_info "Download URL: $DOWNLOAD_URL"
+else
+    # Specific version requested
+    VERSION_NUMBER="${VERSION#v}"
+    DOWNLOAD_URL="$DIST_BASE_URL/lacylights-rpi-$VERSION_NUMBER.tar.gz"
+    EXPECTED_SHA256=""  # No checksum verification for specific versions
+    print_info "Download URL: $DOWNLOAD_URL"
 fi
-
-# Extract version number without 'v' prefix for filename
-VERSION_NUMBER="${VERSION#v}"
-DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$VERSION/lacylights-rpi-$VERSION_NUMBER.tar.gz"
-
-print_info "Download URL: $DOWNLOAD_URL"
 
 # Create temporary directory
 TEMP_DIR=$(mktemp -d)
@@ -233,7 +217,7 @@ trap 'rm -rf "$TEMP_DIR"' EXIT
 
 # Download release archive
 print_header "Downloading Release"
-print_info "Downloading from GitHub..."
+print_info "Downloading from distribution server..."
 
 if ! curl -fsSL -o "$TEMP_DIR/lacylights-rpi.tar.gz" "$DOWNLOAD_URL"; then
     print_error "Failed to download release archive"
@@ -242,13 +226,42 @@ if ! curl -fsSL -o "$TEMP_DIR/lacylights-rpi.tar.gz" "$DOWNLOAD_URL"; then
     print_error "Possible issues:"
     print_error "  1. Version '$VERSION' does not exist"
     print_error "  2. No internet connection"
-    print_error "  3. GitHub is unreachable"
+    print_error "  3. Distribution server is unreachable"
     print_error ""
     print_error "Available releases: https://github.com/$GITHUB_REPO/releases"
     exit 1
 fi
 
 print_success "Download complete"
+
+# Verify checksum if available
+if [ -n "$EXPECTED_SHA256" ]; then
+    print_info "Verifying download integrity..."
+
+    # Calculate actual checksum
+    if command -v sha256sum &> /dev/null; then
+        ACTUAL_SHA256=$(sha256sum "$TEMP_DIR/lacylights-rpi.tar.gz" | awk '{print $1}')
+    elif command -v shasum &> /dev/null; then
+        ACTUAL_SHA256=$(shasum -a 256 "$TEMP_DIR/lacylights-rpi.tar.gz" | awk '{print $1}')
+    else
+        print_warning "SHA256 verification tool not found, skipping checksum verification"
+        ACTUAL_SHA256=""
+    fi
+
+    if [ -n "$ACTUAL_SHA256" ]; then
+        if [ "$ACTUAL_SHA256" = "$EXPECTED_SHA256" ]; then
+            print_success "Checksum verified: $ACTUAL_SHA256"
+        else
+            print_error "Checksum mismatch!"
+            print_error "Expected: $EXPECTED_SHA256"
+            print_error "Actual:   $ACTUAL_SHA256"
+            print_error ""
+            print_error "The download may be corrupted or tampered with."
+            print_error "Please try again or contact support if the problem persists."
+            exit 1
+        fi
+    fi
+fi
 
 # Backup existing installation if present
 if [ -d "$INSTALL_DIR" ]; then
