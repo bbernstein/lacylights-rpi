@@ -13,19 +13,31 @@ The lacylights-rpi repository uses GitHub Actions to automate the release proces
 5. Packages all deployment scripts and configuration files into a tarball
 6. Creates a GitHub release with auto-generated release notes
 7. Attaches the tarball as a release asset
+8. Uploads the artifact to S3 (dist.lacylights.com)
+9. Updates latest.json metadata (stable releases only)
+10. Records release metadata in DynamoDB for API access
 
 ## Creating a Release
 
 ### Prerequisites
 
-**First-time setup**: You need to configure a `RELEASE_TOKEN` secret to allow the workflow to push to the protected main branch.
+**First-time setup**: You need to configure repository secrets for the release workflow.
 
-📖 **See [RELEASE_TOKEN_SETUP.md](RELEASE_TOKEN_SETUP.md) for detailed setup instructions.**
+#### Required Secrets
 
-Quick summary:
-1. Create a fine-grained Personal Access Token with "Contents: Read and write" permission
-2. Add it as a repository secret named `RELEASE_TOKEN`
-3. The workflow will use it to bypass branch protection
+1. **`RELEASE_TOKEN`** - Allows the workflow to push to the protected main branch
+   - 📖 **See [RELEASE_TOKEN_SETUP.md](RELEASE_TOKEN_SETUP.md) for detailed setup instructions**
+   - Quick summary:
+     1. Create a fine-grained Personal Access Token with "Contents: Read and write" permission
+     2. Add it as a repository secret named `RELEASE_TOKEN`
+     3. The workflow will use it to bypass branch protection
+
+2. **AWS Distribution Secrets** - For uploading releases to dist.lacylights.com
+   - `AWS_DIST_ACCESS_KEY_ID` - AWS access key ID with S3 and DynamoDB write permissions
+   - `AWS_DIST_SECRET_ACCESS_KEY` - AWS secret access key
+   - `AWS_DIST_BUCKET` - S3 bucket name (e.g., `lacylights-dist`)
+   - `AWS_DIST_REGION` - AWS region (e.g., `us-east-1`)
+   - `AWS_DIST_DYNAMODB_TABLE` - DynamoDB table name (e.g., `lacylights-releases`)
 
 ### Via GitHub Actions (Recommended)
 
