@@ -366,11 +366,11 @@ else
     MCP_PKG_VERSION="unknown"
 fi
 
-# Create .lacylights-version files with proper user context (consistent with deploy.sh)
-# All version files are owned by lacylights user to match deploy.sh behavior
+# Create .lacylights-version files with proper user context
+# Each component's version file is owned by the same user that owns that component's directory
 sudo -u lacylights bash -c "echo '$BACKEND_PKG_VERSION' > /opt/lacylights/backend/.lacylights-version"
-sudo -u lacylights bash -c "echo '$FRONTEND_PKG_VERSION' > /opt/lacylights/frontend-src/.lacylights-version"
-sudo -u lacylights bash -c "echo '$MCP_PKG_VERSION' > /opt/lacylights/mcp/.lacylights-version"
+sudo -u pi bash -c "echo '$FRONTEND_PKG_VERSION' > /opt/lacylights/frontend-src/.lacylights-version"
+sudo -u pi bash -c "echo '$MCP_PKG_VERSION' > /opt/lacylights/mcp/.lacylights-version"
 
 print_info "Installed versions: Backend=$BACKEND_PKG_VERSION, Frontend=$FRONTEND_PKG_VERSION, MCP=$MCP_PKG_VERSION"
 print_success "Version tracking files created"
