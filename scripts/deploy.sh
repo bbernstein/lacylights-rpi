@@ -465,11 +465,18 @@ get_version() {
     echo "$version"
 }
 
-# Create version files for each repository
+# Create version files for each repository with appropriate ownership
+# backend is owned by lacylights, frontend-src and mcp are owned by pi
 for repo in backend frontend-src mcp; do
     version=$(get_version "/opt/lacylights/$repo")
     echo "[INFO] Setting $repo version to $version"
-    echo "$version" | sudo -u lacylights tee "/opt/lacylights/$repo/.lacylights-version" > /dev/null
+
+    # Use appropriate user based on directory ownership
+    if [ "$repo" = "backend" ]; then
+        echo "$version" | sudo -u lacylights tee "/opt/lacylights/$repo/.lacylights-version" > /dev/null
+    else
+        echo "$version" | sudo -u pi tee "/opt/lacylights/$repo/.lacylights-version" > /dev/null
+    fi
 done
 
 echo "[SUCCESS] Version tracking files created"
