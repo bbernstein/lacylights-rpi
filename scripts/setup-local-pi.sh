@@ -231,7 +231,18 @@ sudo -u pi npm ci
 
 # Build backend
 print_info "Building backend..."
-sudo -u pi bash -c 'cd /opt/lacylights/backend && export PATH="./node_modules/.bin:$PATH" && npm run build'
+if ! sudo -u pi bash -c 'cd /opt/lacylights/backend && export PATH="./node_modules/.bin:$PATH" && npm run build'; then
+    print_error "Backend build failed"
+    exit 1
+fi
+
+# Verify build output exists
+if [ ! -d /opt/lacylights/backend/dist ]; then
+    print_error "Backend build output (dist directory) not found"
+    exit 1
+fi
+
+print_success "Backend build completed successfully"
 
 # Remove dev dependencies after build to save space
 print_info "Removing dev dependencies..."
@@ -269,8 +280,25 @@ sudo -u pi npm ci
 
 # Build frontend
 print_info "Building frontend..."
+print_info "This may take 15-30 seconds on Raspberry Pi..."
 # Build Next.js in server mode (must cd to frontend-src directory in bash -c)
-sudo -u pi bash -c 'cd /opt/lacylights/frontend-src && NEXT_PUBLIC_GRAPHQL_ENDPOINT=http://lacylights.local/graphql npm run build'
+if ! sudo -u pi bash -c 'cd /opt/lacylights/frontend-src && NEXT_PUBLIC_GRAPHQL_ENDPOINT=http://lacylights.local/graphql npm run build'; then
+    print_error "Frontend build failed"
+    exit 1
+fi
+
+# Verify build output exists
+if [ ! -d /opt/lacylights/frontend-src/.next ]; then
+    print_error "Frontend build output (.next directory) not found"
+    exit 1
+fi
+
+if [ ! -f /opt/lacylights/frontend-src/.next/BUILD_ID ]; then
+    print_error "Frontend build incomplete (BUILD_ID missing)"
+    exit 1
+fi
+
+print_success "Frontend build completed successfully"
 
 # Note: We keep dependencies (not pruning) because Next.js server needs them to run
 
@@ -294,7 +322,18 @@ sudo -u pi npm ci
 
 # Build MCP
 print_info "Building MCP server..."
-sudo -u pi bash -c 'cd /opt/lacylights/mcp && export PATH="./node_modules/.bin:$PATH" && npm run build'
+if ! sudo -u pi bash -c 'cd /opt/lacylights/mcp && export PATH="./node_modules/.bin:$PATH" && npm run build'; then
+    print_error "MCP build failed"
+    exit 1
+fi
+
+# Verify build output exists
+if [ ! -d /opt/lacylights/mcp/dist ]; then
+    print_error "MCP build output (dist directory) not found"
+    exit 1
+fi
+
+print_success "MCP build completed successfully"
 
 # Remove dev dependencies after build to save space
 print_info "Removing dev dependencies..."
