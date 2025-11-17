@@ -322,7 +322,18 @@ sudo -u pi npm ci
 
 # Build MCP
 print_info "Building MCP server..."
-sudo -u pi bash -c 'cd /opt/lacylights/mcp && export PATH="./node_modules/.bin:$PATH" && npm run build'
+if ! sudo -u pi bash -c 'cd /opt/lacylights/mcp && export PATH="./node_modules/.bin:$PATH" && npm run build'; then
+    print_error "MCP build failed"
+    exit 1
+fi
+
+# Verify build output exists
+if [ ! -d /opt/lacylights/mcp/dist ]; then
+    print_error "MCP build output (dist directory) not found"
+    exit 1
+fi
+
+print_success "MCP build completed successfully"
 
 # Remove dev dependencies after build to save space
 print_info "Removing dev dependencies..."
