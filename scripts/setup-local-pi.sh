@@ -269,8 +269,8 @@ sudo -u pi npm ci
 
 # Build frontend
 print_info "Building frontend..."
-# Build Next.js in server mode
-sudo -u pi bash -c 'NEXT_PUBLIC_GRAPHQL_ENDPOINT=http://lacylights.local/graphql npm run build'
+# Build Next.js in server mode (must cd to frontend-src directory in bash -c)
+sudo -u pi bash -c 'cd /opt/lacylights/frontend-src && NEXT_PUBLIC_GRAPHQL_ENDPOINT=http://lacylights.local/graphql npm run build'
 
 # Note: We keep dependencies (not pruning) because Next.js server needs them to run
 
