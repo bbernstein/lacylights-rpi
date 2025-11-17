@@ -116,17 +116,22 @@ get_latest_release_version() {
         fi
         rm -f "$response_file"
     else
-        # Fallback without jq - use grep/sed
-        local response=$(curl -s "$latest_json_url" 2>/dev/null)
-        version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        # Fallback without jq - use grep/sed with HTTP status checking
+        local http_code=$(curl -s -w "%{http_code}" -o /dev/null "$latest_json_url" 2>/dev/null)
+        if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            local response=$(curl -s "$latest_json_url" 2>/dev/null)
+            version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
 
-        if [ -z "$version" ]; then
-            version="unknown"
-        else
-            # Ensure version has 'v' prefix for consistency
-            if [[ ! "$version" =~ ^v ]]; then
-                version="v$version"
+            if [ -z "$version" ]; then
+                version="unknown"
+            else
+                # Ensure version has 'v' prefix for consistency
+                if [[ ! "$version" =~ ^v ]]; then
+                    version="v$version"
+                fi
             fi
+        else
+            version="unknown"
         fi
     fi
 
@@ -134,12 +139,12 @@ get_latest_release_version() {
 }
 
 # Function to list all available releases for a repository
-# Note: Distribution server doesn't provide version listing, falls back to GitHub API
+# Note: Distribution server doesn't provide a version listing API, falling back to GitHub API
 list_available_versions() {
     local repo="$1"
     local api_url="https://api.github.com/repos/$GITHUB_ORG/$repo/releases"
 
-    print_warning "Listing versions requires GitHub API (distribution server only provides latest)"
+    print_warning "Distribution server doesn't provide a version listing API, falling back to GitHub API"
 
     if command_exists jq; then
         local response_file
@@ -385,12 +390,18 @@ update_repo() {
         return 1
     fi
 
-    # Fetch metadata from distribution server
-    local latest_json_url="$DIST_BASE_URL/$component/latest.json"
+    # Fetch metadata from distribution server (version-specific or latest)
+    local metadata_url
+    if [ "$target_version" = "latest" ]; then
+        metadata_url="$DIST_BASE_URL/$component/latest.json"
+    else
+        local version_number="${version_to_install#v}"
+        metadata_url="$DIST_BASE_URL/$component/$version_number.json"
+    fi
     local metadata_file="$temp_dir/metadata.json"
 
-    if ! curl -fsSL "$latest_json_url" -o "$metadata_file"; then
-        print_error "Failed to fetch release metadata from $latest_json_url"
+    if ! curl -fsSL "$metadata_url" -o "$metadata_file"; then
+        print_error "Failed to fetch release metadata from $metadata_url"
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     fi
@@ -461,7 +472,7 @@ update_repo() {
         return 1
     fi
 
-    # Determine strip-components based on archive structure
+    # All distribution server archives use the same structure with one top-level directory
     local strip_components=1
 
     # Extract to temporary location
