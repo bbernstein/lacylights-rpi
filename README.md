@@ -28,12 +28,13 @@ curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/inst
 ```
 
 That's it! This will:
-1. Download the setup tools
-2. Configure the system (hostname, packages, swap)
-3. Set up networking (ethernet + WiFi)
-4. Install and configure PostgreSQL
-5. Deploy LacyLights (backend, frontend, MCP server)
-6. Start the service
+1. Download the latest release from dist.lacylights.com
+2. Verify download integrity with SHA256 checksum
+3. Configure the system (hostname, packages, swap)
+4. Set up networking (ethernet + WiFi)
+5. Install and configure PostgreSQL
+6. Deploy LacyLights (backend, frontend, MCP server)
+7. Start the service
 
 After completion, access LacyLights at: **http://lacylights.local**
 
@@ -162,18 +163,30 @@ That's it! The script handles type checking, syncing, building, and restarting.
 
 ### Option 1: One-Command Install (Recommended)
 
-Download and install a specific release with a single command:
+Download and install a release with a single command. The installer automatically fetches releases from **dist.lacylights.com**, our AWS-based distribution platform:
 
 ```bash
-# Install latest release
+# Install latest release (fetches metadata from dist.lacylights.com/releases/rpi/latest.json)
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
 
-# Install specific version
-curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash -s -- v1.0.0
+# Install specific version (downloads from dist.lacylights.com)
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash -s -- v0.1.1
 
 # Remote installation from your development machine
 curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | \
     bash -s -- latest pi@raspberrypi.local
+```
+
+**Benefits of the AWS distribution:**
+- ✅ Fast, reliable downloads from CloudFront CDN
+- ✅ Automatic SHA256 checksum verification for all versions
+- ✅ Always get the latest stable release
+- ✅ No GitHub API rate limits
+
+**Alternative: Download directly from AWS distribution:**
+```bash
+# Download install script from AWS distribution
+curl -fsSL https://dist.lacylights.com/releases/rpi/install.sh | bash
 ```
 
 ### Option 2: Git Clone (For Development)
