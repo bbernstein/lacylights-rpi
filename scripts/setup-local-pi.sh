@@ -368,9 +368,10 @@ fi
 
 # Create .lacylights-version files with proper user context
 # Each component's version file is owned by the same user that owns that component's directory
-sudo -u lacylights bash -c "echo '$BACKEND_PKG_VERSION' > /opt/lacylights/backend/.lacylights-version"
-sudo -u pi bash -c "echo '$FRONTEND_PKG_VERSION' > /opt/lacylights/frontend-src/.lacylights-version"
-sudo -u pi bash -c "echo '$MCP_PKG_VERSION' > /opt/lacylights/mcp/.lacylights-version"
+# Using tee instead of redirect to avoid shell permission issues
+echo "$BACKEND_PKG_VERSION" | sudo -u lacylights tee /opt/lacylights/backend/.lacylights-version > /dev/null
+echo "$FRONTEND_PKG_VERSION" | sudo -u pi tee /opt/lacylights/frontend-src/.lacylights-version > /dev/null
+echo "$MCP_PKG_VERSION" | sudo -u pi tee /opt/lacylights/mcp/.lacylights-version > /dev/null
 
 print_info "Installed versions: Backend=$BACKEND_PKG_VERSION, Frontend=$FRONTEND_PKG_VERSION, MCP=$MCP_PKG_VERSION"
 print_success "Version tracking files created"
