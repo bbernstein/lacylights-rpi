@@ -12,7 +12,10 @@ SCRIPTS_DIR="$LACYLIGHTS_ROOT/scripts"
 BACKUP_DIR="$LACYLIGHTS_ROOT/backups"
 LOG_FILE="$LACYLIGHTS_ROOT/logs/update.log"
 
-# GitHub organization
+# Distribution server configuration
+DIST_BASE_URL="https://dist.lacylights.com/releases"
+
+# GitHub organization (kept for backward compatibility)
 GITHUB_ORG="bbernstein"
 
 # Colors for output
@@ -53,6 +56,17 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to map repository name to distribution component name
+get_dist_component() {
+    local repo="$1"
+    case "$repo" in
+        lacylights-node) echo "node" ;;
+        lacylights-fe) echo "fe-static" ;;  # RPi uses static build
+        lacylights-mcp) echo "mcp" ;;
+        *) echo "" ;;
+    esac
+}
+
 # Function to get the current installed version
 get_installed_version() {
     local repo_dir="$1"
@@ -63,67 +77,69 @@ get_installed_version() {
     fi
 }
 
-# Helper function to extract version from URL or HTML
-# Uses strict semver pattern: v[MAJOR].[MINOR].[PATCH]
-extract_version_from_text() {
-    echo "$1" | grep -oE 'tag/v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's/tag\///'
-}
-
-# Function to get the latest release version from GitHub
+# Function to get the latest release version from distribution server
 get_latest_release_version() {
     local repo="$1"
-    local api_url="https://api.github.com/repos/$GITHUB_ORG/$repo/releases/latest"
+    local component=$(get_dist_component "$repo")
+
+    if [ -z "$component" ]; then
+        echo "unknown"
+        return
+    fi
+
+    local latest_json_url="$DIST_BASE_URL/$component/latest.json"
     local version=""
 
-    # Method 1: Try GitHub API first (may hit rate limits)
+    # Fetch latest.json from distribution server
     if command_exists jq; then
         local response_file
         response_file=$(mktemp) || {
-            # Continue to fallback methods
-            version=""
+            echo "unknown"
+            return
         }
 
-        if [ -n "$response_file" ]; then
-            local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$api_url" 2>/dev/null)
+        local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$latest_json_url" 2>/dev/null)
 
-            # Check for 2xx success codes
-            if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
-                version=$(jq -r '.tag_name // empty' "$response_file" 2>/dev/null)
-                if [ "$version" = "null" ]; then
-                    version=""
+        # Check for 2xx success codes
+        if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            version=$(jq -r '.version // empty' "$response_file" 2>/dev/null)
+            if [ "$version" = "null" ] || [ -z "$version" ]; then
+                version="unknown"
+            else
+                # Ensure version has 'v' prefix for consistency
+                if [[ ! "$version" =~ ^v ]]; then
+                    version="v$version"
                 fi
             fi
-            rm -f "$response_file"
+        else
+            version="unknown"
         fi
+        rm -f "$response_file"
     else
-        # Fallback to grep/cut if jq not available
-        version=$(curl -s "$api_url" 2>/dev/null | grep '"tag_name"' | cut -d '"' -f 4)
+        # Fallback without jq - use grep/sed
+        local response=$(curl -s "$latest_json_url" 2>/dev/null)
+        version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+
+        if [ -z "$version" ]; then
+            version="unknown"
+        else
+            # Ensure version has 'v' prefix for consistency
+            if [[ ! "$version" =~ ^v ]]; then
+                version="v$version"
+            fi
+        fi
     fi
 
-    # Method 2: Try scraping releases page HTML
-    if [ -z "$version" ]; then
-        local page_html=$(curl -fsSL "https://github.com/$GITHUB_ORG/$repo/releases/latest" 2>/dev/null || echo "")
-        version=$(extract_version_from_text "$page_html")
-    fi
-
-    # Method 3: Try redirect location header
-    if [ -z "$version" ]; then
-        local redirect_url=$(curl -fsSLI "https://github.com/$GITHUB_ORG/$repo/releases/latest" 2>/dev/null | grep -i '^location:' || echo "")
-        version=$(extract_version_from_text "$redirect_url")
-    fi
-
-    # Return version or "unknown" if all methods failed
-    if [ -z "$version" ]; then
-        echo "unknown"
-    else
-        echo "$version"
-    fi
+    echo "$version"
 }
 
 # Function to list all available releases for a repository
+# Note: Distribution server doesn't provide version listing, falls back to GitHub API
 list_available_versions() {
     local repo="$1"
     local api_url="https://api.github.com/repos/$GITHUB_ORG/$repo/releases"
+
+    print_warning "Listing versions requires GitHub API (distribution server only provides latest)"
 
     if command_exists jq; then
         local response_file
@@ -359,37 +375,81 @@ update_repo() {
         return 1
     }
 
-    # Download the release archive
+    # Download the release archive from distribution server
     print_status "Downloading $repo_name $version_to_install..."
 
-    # For lacylights-fe, download the pre-built static export artifact
-    # For other repos, download the source archive
-    local download_url
-    local strip_components=1
-    if [ "$repo_name" = "lacylights-fe" ]; then
-        # Download static export release asset (pre-built for RPi)
-        # Version format: strip 'v' prefix for asset name
-        local version_number="${version_to_install#v}"
-        download_url="https://github.com/$GITHUB_ORG/$repo_name/releases/download/$version_to_install/$repo_name-static-$version_number.tar.gz"
-        strip_components=1  # Archive has lacylights-fe-static/ prefix
-    else
-        # Download source archive for other repos
-        download_url="https://github.com/$GITHUB_ORG/$repo_name/archive/refs/tags/$version_to_install.tar.gz"
-        strip_components=1  # Archive has repo-name-version/ prefix
-    fi
-
-    local archive_file="$temp_dir/${repo_name}.tar.gz"
-
-    # Use -f flag to fail on HTTP errors (404, etc.)
-    if ! curl -fsSL "$download_url" -o "$archive_file"; then
-        print_error "Failed to download $repo_name $version_to_install from $download_url"
-        print_error "Check if version exists and release asset is available"
+    local component=$(get_dist_component "$repo_name")
+    if [ -z "$component" ]; then
+        print_error "Unknown component for $repo_name"
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     fi
 
+    # Fetch metadata from distribution server
+    local latest_json_url="$DIST_BASE_URL/$component/latest.json"
+    local metadata_file="$temp_dir/metadata.json"
+
+    if ! curl -fsSL "$latest_json_url" -o "$metadata_file"; then
+        print_error "Failed to fetch release metadata from $latest_json_url"
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
+    fi
+
+    # Extract download URL and SHA256 from metadata
+    local download_url
+    local expected_sha256
+    if command_exists jq; then
+        download_url=$(jq -r '.url // empty' "$metadata_file")
+        expected_sha256=$(jq -r '.sha256 // empty' "$metadata_file")
+    else
+        download_url=$(grep -o '"url"[[:space:]]*:[[:space:]]*"[^"]*"' "$metadata_file" | sed 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        expected_sha256=$(grep -o '"sha256"[[:space:]]*:[[:space:]]*"[^"]*"' "$metadata_file" | sed 's/.*"sha256"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+    fi
+
+    if [ -z "$download_url" ]; then
+        print_error "Could not extract download URL from metadata"
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
+    fi
+
+    local archive_file="$temp_dir/${repo_name}.tar.gz"
+
+    # Download the archive
+    if ! curl -fsSL "$download_url" -o "$archive_file"; then
+        print_error "Failed to download $repo_name from $download_url"
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
+    fi
+
+    # Verify SHA256 checksum if available
+    if [ -n "$expected_sha256" ]; then
+        print_status "Verifying SHA256 checksum..."
+        local actual_sha256
+        if command_exists sha256sum; then
+            actual_sha256=$(sha256sum "$archive_file" | awk '{print $1}')
+        elif command_exists shasum; then
+            actual_sha256=$(shasum -a 256 "$archive_file" | awk '{print $1}')
+        else
+            print_warning "No SHA256 tool available, skipping checksum verification"
+            actual_sha256=""
+        fi
+
+        if [ -n "$actual_sha256" ]; then
+            if [ "$actual_sha256" != "$expected_sha256" ]; then
+                print_error "SHA256 checksum mismatch!"
+                print_error "Expected: $expected_sha256"
+                print_error "Got:      $actual_sha256"
+                rm -rf "$temp_dir" "$temp_backup"
+                return 1
+            fi
+            print_success "SHA256 checksum verified"
+        fi
+    else
+        print_warning "No SHA256 checksum available in metadata, skipping verification"
+    fi
+
     # Validate the downloaded archive integrity
-    print_status "Validating archive integrity..."
+    print_status "Validating archive format..."
     if ! file "$archive_file" | grep -q 'gzip compressed data'; then
         print_error "Downloaded file is not a valid gzip archive"
         rm -rf "$temp_dir" "$temp_backup"
@@ -400,6 +460,9 @@ update_repo() {
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     fi
+
+    # Determine strip-components based on archive structure
+    local strip_components=1
 
     # Extract to temporary location
     print_status "Extracting $repo_name..."
