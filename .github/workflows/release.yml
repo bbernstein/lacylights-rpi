@@ -189,18 +189,51 @@ jobs:
           COMPONENT="rpi"
           VERSION="${{ steps.version.outputs.version }}"
           ARTIFACT="${{ steps.checksum.outputs.artifact }}"
+          SHA256="${{ steps.checksum.outputs.sha256 }}"
+          FILE_SIZE="${{ steps.checksum.outputs.file_size }}"
+          RELEASE_DATE="${{ steps.checksum.outputs.release_date }}"
+          IS_PRERELEASE="${{ steps.checksum.outputs.is_prerelease }}"
 
           echo "Uploading $ARTIFACT to S3..."
           aws s3 cp "$ARTIFACT" \
             "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${COMPONENT}/$ARTIFACT" \
             --content-type "application/gzip"
 
-          echo "Uploading install.sh to S3..."
+          # Create version-specific metadata file for checksum verification
+          cat > "${VERSION}.json" <<EOF
+          {
+            "version": "$VERSION",
+            "url": "https://dist.lacylights.com/releases/${COMPONENT}/$ARTIFACT",
+            "sha256": "$SHA256",
+            "releaseDate": "$RELEASE_DATE",
+            "isPrerelease": $IS_PRERELEASE,
+            "fileSize": $FILE_SIZE
+          }
+          EOF
+
+          echo "Uploading ${VERSION}.json metadata..."
+          aws s3 cp "${VERSION}.json" \
+            "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${COMPONENT}/${VERSION}.json" \
+            --content-type "application/json"
+
+          echo "✓ Upload successful"
+
+      - name: Upload install.sh for stable releases
+        if: steps.checksum.outputs.is_prerelease == 'false'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          COMPONENT="rpi"
+
+          echo "Uploading install.sh to S3 (stable release only)..."
           aws s3 cp install.sh \
             "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${COMPONENT}/install.sh" \
             --content-type "text/x-shellscript"
 
-          echo "✓ Upload successful"
+          echo "✓ install.sh uploaded"
 
       - name: Update latest.json
         if: steps.checksum.outputs.is_prerelease == 'false'

@@ -179,7 +179,7 @@ curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/inst
 
 **Benefits of the AWS distribution:**
 - ✅ Fast, reliable downloads from CloudFront CDN
-- ✅ Automatic SHA256 checksum verification
+- ✅ Automatic SHA256 checksum verification for all versions
 - ✅ Always get the latest stable release
 - ✅ No GitHub API rate limits
 

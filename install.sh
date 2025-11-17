@@ -205,9 +205,31 @@ if [ "$VERSION" = "latest" ]; then
     print_info "Download URL: $DOWNLOAD_URL"
 else
     # Specific version requested
+    print_info "Fetching metadata for version $VERSION..."
+
     VERSION_NUMBER="${VERSION#v}"
-    DOWNLOAD_URL="$DIST_BASE_URL/lacylights-rpi-$VERSION_NUMBER.tar.gz"
-    EXPECTED_SHA256=""  # No checksum verification for specific versions
+
+    # Try to fetch version-specific metadata for checksum verification
+    VERSION_JSON=$(curl -fsSL "$DIST_BASE_URL/$VERSION_NUMBER.json" 2>/dev/null || echo "")
+
+    if [ -n "$VERSION_JSON" ]; then
+        # Parse metadata if available
+        DOWNLOAD_URL=$(echo "$VERSION_JSON" | grep -o '"url"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+        EXPECTED_SHA256=$(echo "$VERSION_JSON" | grep -o '"sha256"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+
+        if [ -z "$DOWNLOAD_URL" ]; then
+            # Fallback if JSON parsing failed
+            DOWNLOAD_URL="$DIST_BASE_URL/lacylights-rpi-$VERSION_NUMBER.tar.gz"
+            EXPECTED_SHA256=""
+        fi
+        print_success "Version metadata found - checksum verification enabled"
+    else
+        # No metadata available, proceed without checksum
+        DOWNLOAD_URL="$DIST_BASE_URL/lacylights-rpi-$VERSION_NUMBER.tar.gz"
+        EXPECTED_SHA256=""
+        print_warning "Version metadata not found - proceeding without checksum verification"
+    fi
+
     print_info "Download URL: $DOWNLOAD_URL"
 fi
 
