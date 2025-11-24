@@ -35,23 +35,24 @@ log() {
 }
 
 # Function to print colored output
+# Output to stderr to not interfere with script output (e.g., JSON)
 print_status() {
-    echo -e "${BLUE}==>${NC} $1"
+    echo -e "${BLUE}==>${NC} $1" >&2
     log "INFO: $1"
 }
 
 print_success() {
-    echo -e "${GREEN}✓${NC} $1"
+    echo -e "${GREEN}✓${NC} $1" >&2
     log "SUCCESS: $1"
 }
 
 print_error() {
-    echo -e "${RED}✗${NC} $1"
+    echo -e "${RED}✗${NC} $1" >&2
     log "ERROR: $1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}!${NC} $1"
+    echo -e "${YELLOW}!${NC} $1" >&2
     log "WARNING: $1"
 }
 
