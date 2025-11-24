@@ -27,9 +27,10 @@ NC='\033[0m' # No Color
 
 # Logging function
 # Try to write to log file, but don't fail if we can't (e.g., read-only filesystem or permissions)
+# Output to stderr to avoid interfering with script output
 log() {
     local timestamp="[$(date '+%Y-%m-%d %H:%M:%S')]"
-    echo "$timestamp $1"
+    echo "$timestamp $1" >&2
     # Attempt to append to log file, ignore errors
     echo "$timestamp $1" >> "$LOG_FILE" 2>/dev/null || true
 }
