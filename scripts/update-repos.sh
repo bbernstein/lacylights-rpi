@@ -26,8 +26,12 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Logging function
+# Try to write to log file, but don't fail if we can't (e.g., read-only filesystem or permissions)
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+    local timestamp="[$(date '+%Y-%m-%d %H:%M:%S')]"
+    echo "$timestamp $1"
+    # Attempt to append to log file, ignore errors
+    echo "$timestamp $1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 # Function to print colored output
