@@ -11,6 +11,11 @@ on:
           - patch
           - minor
           - major
+      is_prerelease:
+        description: 'Create as prerelease (beta)'
+        required: false
+        type: boolean
+        default: false
       release_name:
         description: 'Release name (optional, auto-generated if empty)'
         required: false
@@ -33,32 +38,71 @@ jobs:
       - name: Calculate new version
         id: version
         run: |
-          # Get the latest tag, default to v0.0.0 if none exists
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Latest tag: $LATEST_TAG"
+          # Get all tags and find latest stable version
+          LATEST_STABLE=$(git tag -l 'v*' | grep -Ev 'b[0-9]+$' | sort -V | tail -n1 || echo "v0.0.0")
+          echo "Latest stable: $LATEST_STABLE"
 
-          # Remove 'v' prefix and split into parts
-          VERSION=${LATEST_TAG#v}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          # Remove 'v' prefix
+          STABLE_VERSION=${LATEST_STABLE#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$STABLE_VERSION"
 
-          # Increment based on bump type
-          case "${{ github.event.inputs.version_bump }}" in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-          esac
+          IS_PRERELEASE="${{ github.event.inputs.is_prerelease }}"
 
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          NEW_TAG="v$NEW_VERSION"
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            # Calculate what the next stable version would be
+            case "${{ github.event.inputs.version_bump }}" in
+              major)
+                NEXT_MAJOR=$((MAJOR + 1))
+                NEXT_MINOR=0
+                NEXT_PATCH=0
+                ;;
+              minor)
+                NEXT_MAJOR=$MAJOR
+                NEXT_MINOR=$((MINOR + 1))
+                NEXT_PATCH=0
+                ;;
+              patch)
+                NEXT_MAJOR=$MAJOR
+                NEXT_MINOR=$MINOR
+                NEXT_PATCH=$((PATCH + 1))
+                ;;
+            esac
+
+            # Find existing beta versions for this next stable version
+            NEXT_BASE="v${NEXT_MAJOR}.${NEXT_MINOR}.${NEXT_PATCH}"
+            LATEST_BETA=$(git tag -l "${NEXT_BASE}b*" | sort -V | tail -n1 || echo "")
+
+            if [ -n "$LATEST_BETA" ]; then
+              # Extract beta number and increment
+              BETA_NUM=$(echo "$LATEST_BETA" | sed -E 's/.*b([0-9]+)$/\1/')
+              NEXT_BETA_NUM=$((BETA_NUM + 1))
+            else
+              # First beta
+              NEXT_BETA_NUM=1
+            fi
+
+            NEW_VERSION="${NEXT_MAJOR}.${NEXT_MINOR}.${NEXT_PATCH}b${NEXT_BETA_NUM}"
+            NEW_TAG="v${NEW_VERSION}"
+          else
+            # Stable release - increment normally
+            case "${{ github.event.inputs.version_bump }}" in
+              major)
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+                ;;
+              minor)
+                MINOR=$((MINOR + 1))
+                PATCH=0
+                ;;
+              patch)
+                PATCH=$((PATCH + 1))
+                ;;
+            esac
+
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+            NEW_TAG="v$NEW_VERSION"
+          fi
 
           echo "New version: $NEW_VERSION"
           echo "New tag: $NEW_TAG"
@@ -144,14 +188,32 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Detect prerelease status
+        id: prerelease_check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ "$VERSION" =~ b[0-9]+$ ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "This is a prerelease (beta) version: $VERSION"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "This is a stable release version: $VERSION"
+          fi
+
       - name: Create GitHub release
         if: steps.check_release.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          PRERELEASE_FLAG=""
+          if [ "${{ steps.prerelease_check.outputs.is_prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
           gh release create ${{ steps.version.outputs.tag }} \
             --title "${{ steps.release_name.outputs.name }}" \
             --generate-notes \
+            $PRERELEASE_FLAG \
             lacylights-rpi-${{ steps.version.outputs.version }}.tar.gz
 
       - name: Calculate SHA256 checksum and metadata
@@ -165,7 +227,7 @@ jobs:
 
           # Check if this is a prerelease
           IS_PRERELEASE="false"
-          if [[ "$VERSION" =~ (alpha|beta|rc) ]]; then
+          if [[ "$VERSION" =~ b[0-9]+$ ]]; then
             IS_PRERELEASE="true"
           fi
 

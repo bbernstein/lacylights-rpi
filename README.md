@@ -199,6 +199,101 @@ cd lacylights-rpi
 ./scripts/setup-new-pi.sh pi@raspberrypi.local
 ```
 
+## Releases and Versioning
+
+### Release Types
+
+LacyLights RPi uses semantic versioning with two types of releases:
+
+**Stable Releases** (e.g., `v0.1.6`)
+- Production-ready versions
+- Automatically distributed via `install.sh`
+- Downloaded with: `curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash`
+- Verified with SHA256 checksums
+- Recommended for production use
+
+**Beta Releases** (e.g., `v0.1.7b1`, `v0.1.7b2`)
+- Pre-release testing versions
+- Require manual download from dist.lacylights.com
+- Not auto-installed via `install.sh` (security feature)
+- Perfect for testing new features before stable release
+- Multiple betas can exist for the same target version
+
+### Current Version
+
+Latest stable release: **v0.1.6**
+
+View all releases: [GitHub Releases](https://github.com/bbernstein/lacylights-rpi/releases)
+
+### Installing Specific Versions
+
+**Latest Stable (Recommended):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash
+```
+
+**Specific Stable Version:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/bbernstein/lacylights-rpi/main/install.sh | bash -s -- v0.1.6
+```
+
+**Beta Version (Manual Download Required):**
+```bash
+# Download specific beta
+curl -fsSL https://dist.lacylights.com/releases/rpi/lacylights-rpi-0.1.7b1.tar.gz -o lacylights-beta.tar.gz
+
+# Extract to installation directory
+rm -rf ~/lacylights-setup
+mkdir -p ~/lacylights-setup
+tar xzf lacylights-beta.tar.gz -C ~/lacylights-setup
+chmod +x ~/lacylights-setup/scripts/*.sh
+chmod +x ~/lacylights-setup/setup/*.sh
+chmod +x ~/lacylights-setup/utils/*.sh
+
+# Run setup
+cd ~/lacylights-setup
+sudo ./scripts/setup-local-pi.sh
+```
+
+**Why Beta Versions Require Manual Download:**
+- Prevents accidental installation of pre-release versions
+- Ensures beta testers are intentionally opting in
+- Maintains stability for production users
+- Security best practice for testing software
+
+### Version Format
+
+- **Stable:** `vMAJOR.MINOR.PATCH` (e.g., `v0.1.6`)
+- **Beta:** `vMAJOR.MINOR.PATCHb[N]` (e.g., `v0.1.7b1`)
+
+We follow [Semantic Versioning](https://semver.org/):
+- **MAJOR** (X.0.0): Breaking changes requiring user action
+- **MINOR** (0.X.0): New features, backward compatible
+- **PATCH** (0.0.X): Bug fixes and small improvements
+
+### Distribution Infrastructure
+
+All releases are distributed via AWS-powered infrastructure:
+
+- **S3 Bucket:** Fast, reliable downloads from CloudFront CDN
+- **SHA256 Verification:** All versions include checksums
+- **DynamoDB Metadata:** Programmatic access to release information
+- **No GitHub API Rate Limits:** Direct downloads, no throttling
+
+**Metadata URLs:**
+```bash
+# Latest stable release metadata
+curl https://dist.lacylights.com/releases/rpi/latest.json
+
+# Specific version metadata
+curl https://dist.lacylights.com/releases/rpi/0.1.6.json
+
+# Beta version metadata
+curl https://dist.lacylights.com/releases/rpi/0.1.7b1.json
+```
+
+For maintainers creating releases, see [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md).
+
 ## What's Included
 
 This repository provides:
@@ -625,9 +720,15 @@ To create releases, you need to set up a `RELEASE_TOKEN` secret first:
 Once configured, create releases via GitHub Actions:
 1. Go to Actions → Create Release
 2. Select version bump type (patch/minor/major)
-3. Run workflow
+3. Choose stable or beta (prerelease) release
+4. Run workflow
 
-See [docs/RELEASES.md](docs/RELEASES.md) for complete release management guide.
+**Release Types:**
+- **Stable Releases** (e.g., `v0.1.6`): Production-ready, automatically distributed via install.sh
+- **Beta Releases** (e.g., `v0.1.7b1`): Pre-release testing versions, require manual download
+
+📖 **See [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) for detailed release process guide**
+📖 **See [docs/RELEASES.md](docs/RELEASES.md) for release management overview**
 
 ## Documentation
 
@@ -643,8 +744,11 @@ See [docs/RELEASES.md](docs/RELEASES.md) for complete release management guide.
 - **Maintenance:**
   - [UPDATING.md](docs/UPDATING.md) - System updates
   - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
-  - [RELEASES.md](docs/RELEASES.md) - Creating and managing releases
-  - [RELEASE_TOKEN_SETUP.md](docs/RELEASE_TOKEN_SETUP.md) - Setting up release automation token (maintainers only)
+
+- **Release Management (Maintainers):**
+  - [RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md) - Complete release process guide (stable and beta)
+  - [RELEASES.md](docs/RELEASES.md) - Release management overview
+  - [RELEASE_TOKEN_SETUP.md](docs/RELEASE_TOKEN_SETUP.md) - Setting up release automation token
 
 - **Scripts:**
   - [scripts/deploy.sh](scripts/deploy.sh) - Deployment script
