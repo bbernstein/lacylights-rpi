@@ -39,7 +39,7 @@ jobs:
         id: version
         run: |
           # Get all tags and find latest stable version
-          LATEST_STABLE=$(git tag -l 'v*' | grep -v 'b[0-9]*$' | sort -V | tail -n1 || echo "v0.0.0")
+          LATEST_STABLE=$(git tag -l 'v*' | grep -Ev 'b[0-9]+$' | sort -V | tail -n1 || echo "v0.0.0")
           echo "Latest stable: $LATEST_STABLE"
 
           # Remove 'v' prefix
