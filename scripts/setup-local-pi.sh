@@ -421,7 +421,10 @@ print_info "Installing frontend systemd service..."
 cp "$SETUP_DIR/systemd/lacylights-frontend.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable lacylights-frontend
-systemctl start lacylights-frontend
+
+# Restart service to ensure new code is loaded (works for both initial install and updates)
+print_info "Starting/restarting frontend service..."
+systemctl restart lacylights-frontend
 print_success "Frontend service installed and started"
 
 # Check frontend service status
@@ -434,7 +437,8 @@ fi
 
 # Start the backend service
 print_header "Starting LacyLights Backend Service"
-systemctl start lacylights
+print_info "Starting/restarting backend service to load new code..."
+systemctl restart lacylights
 print_success "Backend service started"
 
 # Check backend service status
