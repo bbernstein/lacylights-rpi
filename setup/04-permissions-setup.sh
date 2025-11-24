@@ -65,13 +65,23 @@ sudo mkdir -p /opt/lacylights/{backend,frontend-src,mcp,scripts,repos,backups,lo
 sudo chown -R lacylights:lacylights /opt/lacylights
 sudo chmod -R 755 /opt/lacylights
 
-# Copy update-repos.sh script to /opt/lacylights/scripts/
+# Copy update scripts to /opt/lacylights/scripts/
 if [ -f "$REPO_DIR/scripts/update-repos.sh" ]; then
-    print_info "Installing version management script..."
+    print_info "Installing version management scripts..."
     sudo cp "$REPO_DIR/scripts/update-repos.sh" /opt/lacylights/scripts/
     sudo chmod +x /opt/lacylights/scripts/update-repos.sh
     sudo chown lacylights:lacylights /opt/lacylights/scripts/update-repos.sh
-    print_success "Version management script installed"
+
+    # Install wrapper script for read-only filesystem support
+    if [ -f "$REPO_DIR/scripts/update-repos-wrapper.sh" ]; then
+        sudo cp "$REPO_DIR/scripts/update-repos-wrapper.sh" /opt/lacylights/scripts/
+        sudo chmod +x /opt/lacylights/scripts/update-repos-wrapper.sh
+        sudo chown lacylights:lacylights /opt/lacylights/scripts/update-repos-wrapper.sh
+        print_success "Version management scripts installed (including read-only filesystem wrapper)"
+    else
+        print_success "Version management script installed"
+        print_error "Warning: update-repos-wrapper.sh not found (read-only filesystem support unavailable)"
+    fi
 else
     print_error "Warning: update-repos.sh not found at $REPO_DIR/scripts/update-repos.sh"
 fi

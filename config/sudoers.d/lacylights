@@ -39,3 +39,10 @@ lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli radio all *
 # Allow general network status queries (read-only)
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli general status
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli networking connectivity
+
+# Allow repository updates via wrapper script (handles read-only filesystem remounting)
+lacylights ALL=(ALL) NOPASSWD: /opt/lacylights/scripts/update-repos-wrapper.sh *
+
+# Allow filesystem remounting for updates (used by wrapper script)
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mount -o remount\,rw /
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mount -o remount\,ro /
