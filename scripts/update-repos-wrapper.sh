@@ -71,12 +71,15 @@ remount_rw() {
 
     if is_root_readonly; then
         print_status "Remounting root filesystem as read-write..."
-        if sudo mount -o remount,rw /; then
+        # Try to remount with sudo, but don't fail if sudo doesn't work
+        # (e.g., when running from systemd service with NoNewPrivileges)
+        if sudo mount -o remount,rw / 2>/dev/null; then
             print_success "Root filesystem remounted as read-write"
             return 0
         else
-            print_error "Failed to remount root filesystem as read-write"
-            return 1
+            print_warning "Could not remount filesystem (may not have sudo access)"
+            print_warning "Continuing anyway - operations may still work if paths are already writable"
+            return 0
         fi
     else
         print_status "Root filesystem already writable"
@@ -95,13 +98,14 @@ remount_ro() {
         # Sync first to ensure all writes are flushed
         sync
         sleep 1
+        # Try to remount, but don't fail if sudo doesn't work
         if sudo mount -o remount,ro / 2>/dev/null; then
             print_success "Root filesystem remounted as read-only"
             return 0
         else
-            print_warning "Failed to remount root filesystem as read-only"
+            print_warning "Could not remount filesystem as read-only (may not have sudo access)"
             print_warning "This is not critical, but you may want to reboot soon"
-            return 1
+            return 0
         fi
     fi
     return 0
@@ -122,17 +126,24 @@ trap cleanup EXIT INT TERM
 # Main execution
 print_status "Starting LacyLights update process..."
 
-# Remount as read-write
-if ! remount_rw; then
-    print_error "Cannot proceed without write access to filesystem"
-    exit 1
-fi
+# Remount as read-write (non-fatal if it fails - may already be writable)
+remount_rw
 
 # Ensure log directory exists
 if [ ! -d "/opt/lacylights/logs" ]; then
     print_status "Creating log directory..."
-    sudo mkdir -p /opt/lacylights/logs
-    sudo chown lacylights:lacylights /opt/lacylights/logs
+    # Try with sudo first, fall back to direct creation
+    if ! sudo mkdir -p /opt/lacylights/logs 2>/dev/null; then
+        # If sudo fails, try without it (may work if we already have write access)
+        if mkdir -p /opt/lacylights/logs 2>/dev/null; then
+            print_success "Log directory created"
+        else
+            print_warning "Could not create log directory (may not have write access)"
+        fi
+    else
+        sudo chown lacylights:lacylights /opt/lacylights/logs 2>/dev/null || true
+        print_success "Log directory created"
+    fi
 fi
 
 # Run the actual update script
