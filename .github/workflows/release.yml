@@ -231,7 +231,7 @@ jobs:
         id: prerelease_check
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          if [[ "$VERSION" =~ b[0-9]+$ ]]; then
+          if [[ "$VERSION" =~ -beta\.[0-9]+$ ]]; then
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
             echo "This is a prerelease (beta) version: $VERSION"
           else
@@ -266,7 +266,7 @@ jobs:
 
           # Check if this is a prerelease
           IS_PRERELEASE="false"
-          if [[ "$VERSION" =~ b[0-9]+$ ]]; then
+          if [[ "$VERSION" =~ -beta\.[0-9]+$ ]]; then
             IS_PRERELEASE="true"
           fi
 
