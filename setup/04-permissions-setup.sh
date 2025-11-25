@@ -109,6 +109,31 @@ else
     exit 1
 fi
 
+# Set up npm cache directory with correct permissions
+# This prevents "Your cache folder contains root-owned files" errors
+print_info "Setting up npm cache directory..."
+
+# Create home directory for lacylights user if needed (for npm cache)
+if [ ! -d "/home/lacylights" ]; then
+    sudo mkdir -p /home/lacylights
+    sudo chown lacylights:lacylights /home/lacylights
+    sudo chmod 755 /home/lacylights
+fi
+
+# Create npm cache directory with correct ownership
+sudo mkdir -p /home/lacylights/.npm
+sudo chown -R lacylights:lacylights /home/lacylights/.npm
+sudo chmod -R 755 /home/lacylights/.npm
+
+# Create other npm-related directories that might be needed
+for dir in /home/lacylights/.node-gyp /home/lacylights/.cache; do
+    sudo mkdir -p "$dir"
+    sudo chown -R lacylights:lacylights "$dir"
+    sudo chmod -R 755 "$dir"
+done
+
+print_success "npm cache directory configured"
+
 print_header "Permissions Setup Complete"
 print_success "User, group, and permissions configured"
 print_info ""
@@ -120,4 +145,5 @@ print_info "  - Scripts: /opt/lacylights/scripts/ (version management)"
 print_info "  - Repos: /opt/lacylights/repos/ (symlinks to backend/frontend/mcp)"
 print_info "  - Backups: /opt/lacylights/backups/ (for update rollbacks)"
 print_info "  - Logs: /opt/lacylights/logs/ (update logs)"
+print_info "  - npm cache: /home/lacylights/.npm/"
 print_info "  - Sudoers: /etc/sudoers.d/lacylights (WiFi management)"

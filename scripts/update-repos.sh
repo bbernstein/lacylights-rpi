@@ -62,6 +62,55 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to fix npm cache permissions
+# This fixes issues where npm cache was created by root user
+fix_npm_permissions() {
+    local npm_home="/home/lacylights/.npm"
+
+    # Get lacylights user/group IDs
+    local lacylights_uid=$(id -u lacylights 2>/dev/null || echo "")
+    local lacylights_gid=$(id -g lacylights 2>/dev/null || echo "")
+
+    if [ -z "$lacylights_uid" ] || [ -z "$lacylights_gid" ]; then
+        print_warning "Could not determine lacylights user/group IDs, skipping npm permission fix"
+        return 0
+    fi
+
+    # Create npm cache directory if it doesn't exist
+    if [ ! -d "$npm_home" ]; then
+        print_status "Creating npm cache directory..."
+        sudo mkdir -p "$npm_home"
+        sudo chown -R "$lacylights_uid:$lacylights_gid" "$npm_home"
+    fi
+
+    # Fix ownership of npm cache directory
+    # This resolves "Your cache folder contains root-owned files" errors
+    if [ -d "$npm_home" ]; then
+        local current_owner=$(stat -c '%u' "$npm_home" 2>/dev/null || stat -f '%u' "$npm_home" 2>/dev/null || echo "")
+        if [ -n "$current_owner" ] && [ "$current_owner" != "$lacylights_uid" ]; then
+            print_status "Fixing npm cache permissions..."
+            sudo chown -R "$lacylights_uid:$lacylights_gid" "$npm_home" 2>/dev/null || {
+                print_warning "Could not fix npm cache permissions (may need manual intervention)"
+            }
+        fi
+    fi
+
+    # Also fix other npm-related directories that might have wrong permissions
+    local npm_dirs=(
+        "/home/lacylights/.node-gyp"
+        "/home/lacylights/.cache/node"
+    )
+
+    for dir in "${npm_dirs[@]}"; do
+        if [ -d "$dir" ]; then
+            local dir_owner=$(stat -c '%u' "$dir" 2>/dev/null || stat -f '%u' "$dir" 2>/dev/null || echo "")
+            if [ -n "$dir_owner" ] && [ "$dir_owner" != "$lacylights_uid" ]; then
+                sudo chown -R "$lacylights_uid:$lacylights_gid" "$dir" 2>/dev/null || true
+            fi
+        fi
+    done
+}
+
 # Function to map repository name to distribution component name
 get_dist_component() {
     local repo="$1"
@@ -219,6 +268,9 @@ restore_from_backup() {
         print_error "Failed to restore from backup"
         return 1
     fi
+
+    # Fix npm cache permissions before running npm commands
+    fix_npm_permissions
 
     # Reinstall dependencies and rebuild for the restored version
     print_status "Reinstalling dependencies for restored $repo_name..."
@@ -578,6 +630,9 @@ update_repo() {
         # Frontend uses pre-built static export - no npm install or build needed
         print_success "Using pre-built static export for $repo_name (no build required)"
     elif [ -f "$repo_dir/package.json" ]; then
+        # Fix npm cache permissions before running npm commands
+        fix_npm_permissions
+
         print_status "Installing dependencies for $repo_name..."
         pushd "$repo_dir" >/dev/null
 
