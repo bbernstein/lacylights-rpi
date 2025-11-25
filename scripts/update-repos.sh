@@ -80,6 +80,7 @@ fix_npm_permissions() {
     if [ ! -d "$npm_home" ]; then
         print_status "Creating npm cache directory..."
         sudo mkdir -p "$npm_home"
+        sudo chown -R "$lacylights_uid:$lacylights_gid" "$npm_home"
     fi
 
     # Fix ownership of npm cache directory
@@ -94,9 +95,8 @@ fix_npm_permissions() {
         fi
     fi
 
-    # Also fix common npm directories that might have wrong permissions
+    # Also fix other npm-related directories that might have wrong permissions
     local npm_dirs=(
-        "/home/lacylights/.npm"
         "/home/lacylights/.node-gyp"
         "/home/lacylights/.cache/node"
     )

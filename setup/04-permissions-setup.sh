@@ -127,9 +127,7 @@ sudo chmod -R 755 /home/lacylights/.npm
 
 # Create other npm-related directories that might be needed
 for dir in /home/lacylights/.node-gyp /home/lacylights/.cache; do
-    if [ ! -d "$dir" ]; then
-        sudo mkdir -p "$dir"
-    fi
+    sudo mkdir -p "$dir"
     sudo chown -R lacylights:lacylights "$dir"
     sudo chmod -R 755 "$dir"
 done
