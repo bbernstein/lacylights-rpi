@@ -37,8 +37,6 @@ jobs:
 
       - name: Calculate new version
         id: version
-        env:
-          BETA_VERSION_PATTERN: '^([0-9]+\.[0-9]+\.[0-9]+)b([0-9]+)$'
         run: |
           # Get the latest tag (could be stable or beta)
           CURRENT_VERSION=$(git tag -l 'v*' | sort -V | tail -n1 | sed 's/^v//' || echo "0.0.0")
@@ -62,16 +60,29 @@ jobs:
             echo "Detected stable: $BASE_VERSION"
           fi
 
+          # Validate base version format before parsing
+          if ! [[ "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Invalid base version format: $BASE_VERSION"
+            exit 1
+          fi
+
           # Parse base version
           IFS='.' read -ra VERSION_PARTS <<< "$BASE_VERSION"
-          MAJOR="${VERSION_PARTS[0]}"
-          MINOR="${VERSION_PARTS[1]}"
-          PATCH="${VERSION_PARTS[2]}"
+          MAJOR="${VERSION_PARTS[0]:-0}"
+          MINOR="${VERSION_PARTS[1]:-0}"
+          PATCH="${VERSION_PARTS[2]:-0}"
+
+          # Validate that we have valid numbers
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]] || ! [[ "$MINOR" =~ ^[0-9]+$ ]] || ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid version format: $BASE_VERSION"
+            exit 1
+          fi
 
           # Decision logic - handles 4 scenarios correctly
           if [ "$IS_PRERELEASE" = "true" ]; then
             if [ "$IS_CURRENT_BETA" = "true" ]; then
               # Scenario 1: Beta -> Next Beta (increment beta number ONLY, ignore version_bump)
+              echo "⚠️  Warning: version_bump '$VERSION_BUMP' ignored for beta-to-beta increment"
               BETA_NUMBER=$((BETA_NUMBER + 1))
               NEW_VERSION="${BASE_VERSION}b${BETA_NUMBER}"
               echo "Scenario: Beta -> Next Beta"
@@ -90,6 +101,10 @@ jobs:
                 patch)
                   PATCH=$((PATCH + 1))
                   ;;
+                *)
+                  echo "Error: Invalid version_bump value: $VERSION_BUMP"
+                  exit 1
+                  ;;
               esac
               NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}b1"
               echo "Scenario: Stable -> First Beta"
@@ -97,6 +112,7 @@ jobs:
           else
             if [ "$IS_CURRENT_BETA" = "true" ]; then
               # Scenario 3: Beta -> Stable (finalize by removing beta suffix)
+              echo "⚠️  Warning: version_bump '$VERSION_BUMP' ignored for beta-to-stable finalization"
               NEW_VERSION="$BASE_VERSION"
               echo "Scenario: Beta -> Stable Finalization"
             else
@@ -113,6 +129,10 @@ jobs:
                   ;;
                 patch)
                   PATCH=$((PATCH + 1))
+                  ;;
+                *)
+                  echo "Error: Invalid version_bump value: $VERSION_BUMP"
+                  exit 1
                   ;;
               esac
               NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
@@ -136,34 +156,25 @@ jobs:
 
       - name: Push version update and create tag
         run: |
-          # Get current branch name
+          set -e
           CURRENT_BRANCH="${{ github.ref_name }}"
+          VERSION_TAG="${{ steps.version.outputs.tag }}"
+
           echo "Current branch: $CURRENT_BRANCH"
+          echo "Version tag: $VERSION_TAG"
 
-          # Push the commit and create tag with retry logic
-          MAX_ATTEMPTS=3
-          ATTEMPT=1
+          # Push the version commit first
+          git push origin "$CURRENT_BRANCH"
 
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
+          # Check if tag exists on remote (skip if exists - idempotent)
+          if git ls-remote --tags origin "refs/tags/$VERSION_TAG" | grep -q "$VERSION_TAG"; then
+            echo "Tag $VERSION_TAG already exists on remote. Skipping creation."
+          else
+            git tag -a "$VERSION_TAG" -m "Release $VERSION_TAG"
+            git push origin "$VERSION_TAG"
+          fi
 
-            if git push origin "$CURRENT_BRANCH" && git tag ${{ steps.version.outputs.tag }} && git push origin ${{ steps.version.outputs.tag }}; then
-              echo "Successfully pushed version update and tag"
-              exit 0
-            else
-              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-                echo "Push failed, cleaning up tag and retrying in 5 seconds..."
-                git tag -d ${{ steps.version.outputs.tag }} 2>/dev/null || true
-                sleep 5
-              else
-                echo "Failed to push after $MAX_ATTEMPTS attempts"
-                git tag -d ${{ steps.version.outputs.tag }} 2>/dev/null || true
-                exit 1
-              fi
-            fi
-
-            ATTEMPT=$((ATTEMPT + 1))
-          done
+          echo "Successfully pushed version update and tag"
 
       - name: Create release archive
         run: |
