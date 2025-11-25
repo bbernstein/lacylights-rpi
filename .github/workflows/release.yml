@@ -48,8 +48,19 @@ jobs:
           echo "Version bump: $VERSION_BUMP"
           echo "Is prerelease: $IS_PRERELEASE"
 
-          # Detect if current version is a beta (format: X.Y.Zb[N])
-          if [[ "$CURRENT_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)b([0-9]+)$ ]]; then
+          # Normalize old format to new format if needed (self-correction)
+          # Old format: X.Y.Zb[N] or X.Y.Z-b[N]
+          # New format: X.Y.Z-beta.[N]
+          if [[ "$CURRENT_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-?b([0-9]+)$ ]]; then
+            echo "⚠️  Old format detected: $CURRENT_VERSION"
+            BASE_VERSION="${BASH_REMATCH[1]}"
+            BETA_NUMBER="${BASH_REMATCH[2]}"
+            CURRENT_VERSION="${BASE_VERSION}-beta.${BETA_NUMBER}"
+            echo "✓ Normalized to: $CURRENT_VERSION"
+          fi
+
+          # Detect if current version is a beta (semver format: X.Y.Z-beta.[N])
+          if [[ "$CURRENT_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
             IS_CURRENT_BETA=true
             BASE_VERSION="${BASH_REMATCH[1]}"
             BETA_NUMBER="${BASH_REMATCH[2]}"
@@ -78,16 +89,16 @@ jobs:
             exit 1
           fi
 
-          # Decision logic - handles 4 scenarios correctly
+          # Decision logic - handles 4 scenarios correctly (semver-compatible)
           if [ "$IS_PRERELEASE" = "true" ]; then
             if [ "$IS_CURRENT_BETA" = "true" ]; then
               # Scenario 1: Beta -> Next Beta (increment beta number ONLY, ignore version_bump)
               echo "⚠️  Warning: version_bump '$VERSION_BUMP' ignored for beta-to-beta increment"
               BETA_NUMBER=$((BETA_NUMBER + 1))
-              NEW_VERSION="${BASE_VERSION}b${BETA_NUMBER}"
+              NEW_VERSION="${BASE_VERSION}-beta.${BETA_NUMBER}"
               echo "Scenario: Beta -> Next Beta"
             else
-              # Scenario 2: Stable -> First Beta (apply version_bump, add b1)
+              # Scenario 2: Stable -> First Beta (apply version_bump, add -beta.1)
               case "$VERSION_BUMP" in
                 major)
                   MAJOR=$((MAJOR + 1))
@@ -106,7 +117,7 @@ jobs:
                   exit 1
                   ;;
               esac
-              NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}b1"
+              NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}-beta.1"
               echo "Scenario: Stable -> First Beta"
             fi
           else
