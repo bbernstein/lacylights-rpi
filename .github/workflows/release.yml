@@ -37,8 +37,6 @@ jobs:
 
       - name: Calculate new version
         id: version
-        env:
-          BETA_VERSION_PATTERN: '^([0-9]+\.[0-9]+\.[0-9]+)b([0-9]+)$'
         run: |
           # Get the latest tag (could be stable or beta)
           CURRENT_VERSION=$(git tag -l 'v*' | sort -V | tail -n1 | sed 's/^v//' || echo "0.0.0")
@@ -64,14 +62,21 @@ jobs:
 
           # Parse base version
           IFS='.' read -ra VERSION_PARTS <<< "$BASE_VERSION"
-          MAJOR="${VERSION_PARTS[0]}"
-          MINOR="${VERSION_PARTS[1]}"
-          PATCH="${VERSION_PARTS[2]}"
+          MAJOR="${VERSION_PARTS[0]:-0}"
+          MINOR="${VERSION_PARTS[1]:-0}"
+          PATCH="${VERSION_PARTS[2]:-0}"
+
+          # Validate that we have valid numbers
+          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]] || ! [[ "$MINOR" =~ ^[0-9]+$ ]] || ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+            echo "Error: Invalid version format: $BASE_VERSION"
+            exit 1
+          fi
 
           # Decision logic - handles 4 scenarios correctly
           if [ "$IS_PRERELEASE" = "true" ]; then
             if [ "$IS_CURRENT_BETA" = "true" ]; then
               # Scenario 1: Beta -> Next Beta (increment beta number ONLY, ignore version_bump)
+              echo "⚠️  Warning: version_bump '$VERSION_BUMP' ignored for beta-to-beta increment"
               BETA_NUMBER=$((BETA_NUMBER + 1))
               NEW_VERSION="${BASE_VERSION}b${BETA_NUMBER}"
               echo "Scenario: Beta -> Next Beta"
@@ -89,6 +94,10 @@ jobs:
                   ;;
                 patch)
                   PATCH=$((PATCH + 1))
+                  ;;
+                *)
+                  echo "Error: Invalid version_bump value: $VERSION_BUMP"
+                  exit 1
                   ;;
               esac
               NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}b1"
@@ -113,6 +122,10 @@ jobs:
                   ;;
                 patch)
                   PATCH=$((PATCH + 1))
+                  ;;
+                *)
+                  echo "Error: Invalid version_bump value: $VERSION_BUMP"
+                  exit 1
                   ;;
               esac
               NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
@@ -146,13 +159,13 @@ jobs:
           # Push the version commit first
           git push origin "$CURRENT_BRANCH"
 
-          # Delete existing tag if present (local and remote) - idempotent
-          git tag -d "$VERSION_TAG" 2>/dev/null || true
-          git push origin ":refs/tags/$VERSION_TAG" 2>/dev/null || true
-
-          # Create and push new tag
-          git tag -a "$VERSION_TAG" -m "Release $VERSION_TAG"
-          git push origin "$VERSION_TAG"
+          # Check if tag exists, skip creation if it does (idempotent)
+          if git rev-parse "$VERSION_TAG" >/dev/null 2>&1; then
+            echo "Tag $VERSION_TAG already exists. Skipping creation."
+          else
+            git tag -a "$VERSION_TAG" -m "Release $VERSION_TAG"
+            git push origin "$VERSION_TAG"
+          fi
 
           echo "Successfully pushed version update and tag"
 
