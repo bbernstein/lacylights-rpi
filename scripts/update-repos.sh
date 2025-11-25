@@ -168,11 +168,13 @@ list_available_versions() {
             return
         fi
 
-        local versions=$(jq -r '.[].tag_name' "$response_file" | head -20)
+        # Extract versions and sort using semantic versioning (sort -V handles semver properly)
+        local versions=$(jq -r '.[].tag_name' "$response_file" | sort -rV | head -20)
         rm -f "$response_file"
         echo "$versions"
     else
-        curl -s "$api_url" | grep '"tag_name"' | cut -d '"' -f 4 | head -20
+        # Fallback without jq - also use semver sorting
+        curl -s "$api_url" | grep '"tag_name"' | cut -d '"' -f 4 | sort -rV | head -20
     fi
 }
 
