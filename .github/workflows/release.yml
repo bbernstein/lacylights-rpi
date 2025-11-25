@@ -136,34 +136,25 @@ jobs:
 
       - name: Push version update and create tag
         run: |
-          # Get current branch name
+          set -e
           CURRENT_BRANCH="${{ github.ref_name }}"
+          VERSION_TAG="${{ steps.version.outputs.tag }}"
+
           echo "Current branch: $CURRENT_BRANCH"
+          echo "Version tag: $VERSION_TAG"
 
-          # Push the commit and create tag with retry logic
-          MAX_ATTEMPTS=3
-          ATTEMPT=1
+          # Push the version commit first
+          git push origin "$CURRENT_BRANCH"
 
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS..."
+          # Delete existing tag if present (local and remote) - idempotent
+          git tag -d "$VERSION_TAG" 2>/dev/null || true
+          git push origin ":refs/tags/$VERSION_TAG" 2>/dev/null || true
 
-            if git push origin "$CURRENT_BRANCH" && git tag ${{ steps.version.outputs.tag }} && git push origin ${{ steps.version.outputs.tag }}; then
-              echo "Successfully pushed version update and tag"
-              exit 0
-            else
-              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-                echo "Push failed, cleaning up tag and retrying in 5 seconds..."
-                git tag -d ${{ steps.version.outputs.tag }} 2>/dev/null || true
-                sleep 5
-              else
-                echo "Failed to push after $MAX_ATTEMPTS attempts"
-                git tag -d ${{ steps.version.outputs.tag }} 2>/dev/null || true
-                exit 1
-              fi
-            fi
+          # Create and push new tag
+          git tag -a "$VERSION_TAG" -m "Release $VERSION_TAG"
+          git push origin "$VERSION_TAG"
 
-            ATTEMPT=$((ATTEMPT + 1))
-          done
+          echo "Successfully pushed version update and tag"
 
       - name: Create release archive
         run: |
