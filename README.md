@@ -741,6 +741,9 @@ Once configured, create releases via GitHub Actions:
   - [WIFI_SETUP.md](docs/WIFI_SETUP.md) - WiFi configuration
   - [config/.env.example](config/.env.example) - Environment variables
 
+- **Backend Migration:**
+  - [GO_BACKEND_MIGRATION.md](docs/GO_BACKEND_MIGRATION.md) - Migrate from Node.js to Go backend
+
 - **Maintenance:**
   - [UPDATING.md](docs/UPDATING.md) - System updates
   - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
@@ -755,10 +758,28 @@ Once configured, create releases via GitHub Actions:
   - [scripts/setup-new-pi.sh](scripts/setup-new-pi.sh) - Setup script
   - [install.sh](install.sh) - One-command installer
 
+## Backend Options
+
+LacyLights supports two backend implementations:
+
+### Go Backend (Recommended for new installations)
+- **Performance**: Faster startup, lower memory usage (~256MB vs ~512MB)
+- **Deployment**: Single compiled binary, no Node.js runtime needed
+- **Compatibility**: 100% API compatible with Node.js backend
+- **Status**: Production-ready
+
+### Node.js Backend (Legacy)
+- **Mature**: Battle-tested, original implementation
+- **Development**: Easier for TypeScript developers to modify
+- **Migration**: Existing installations can migrate to Go backend
+
+See [GO_BACKEND_MIGRATION.md](docs/GO_BACKEND_MIGRATION.md) for migration guide.
+
 ## Related Repositories
 
 - [lacylights](https://github.com/bbernstein/lacylights) - Main documentation
-- [lacylights-node](https://github.com/bbernstein/lacylights-node) - Backend (GraphQL, DMX, Database)
+- [lacylights-node](https://github.com/bbernstein/lacylights-node) - Node.js Backend (GraphQL, DMX, Database)
+- [lacylights-go](https://github.com/bbernstein/lacylights-go) - Go Backend (GraphQL, DMX, Database)
 - [lacylights-fe](https://github.com/bbernstein/lacylights-fe) - Frontend (React, Next.js)
 - [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) - MCP Server (AI integration)
 

@@ -1,0 +1,42 @@
+[Unit]
+Description=LacyLights Stage Lighting Control (Go Backend)
+Documentation=https://github.com/bbernstein/lacylights
+After=network.target
+
+[Service]
+Type=simple
+User=lacylights
+Group=lacylights
+WorkingDirectory=/opt/lacylights/backend
+
+# Environment variables
+Environment="NODE_ENV=production"
+EnvironmentFile=/opt/lacylights/backend/.env
+
+# Start the Go backend server
+ExecStart=/opt/lacylights/backend/lacylights-server
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitBurst=3
+StartLimitInterval=60
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lacylights
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lacylights
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
