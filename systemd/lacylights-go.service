@@ -10,7 +10,6 @@ Group=lacylights
 WorkingDirectory=/opt/lacylights/backend
 
 # Environment variables
-Environment="NODE_ENV=production"
 EnvironmentFile=/opt/lacylights/backend/.env
 
 # Start the Go backend server

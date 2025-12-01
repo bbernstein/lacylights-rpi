@@ -141,20 +141,23 @@ echo "Architecture: $ARCH"
 
 Download appropriate binary:
 ```bash
+# First, fetch the latest version number
+LATEST_VERSION=$(curl -fsSL https://dist.lacylights.com/releases/go/latest.json | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+
 # For 64-bit ARM (Pi 4/5)
 curl -fsSL -o /tmp/lacylights-server \
-  https://dist.lacylights.com/releases/go/lacylights-server-latest-arm64
+  https://dist.lacylights.com/releases/go/lacylights-server-${LATEST_VERSION}-arm64
 
 # For 32-bit ARM (Pi 3)
 curl -fsSL -o /tmp/lacylights-server \
-  https://dist.lacylights.com/releases/go/lacylights-server-latest-armhf
+  https://dist.lacylights.com/releases/go/lacylights-server-${LATEST_VERSION}-armhf
 ```
 
 Verify checksum (optional but recommended):
 ```bash
 # Download checksum file
 curl -fsSL -o /tmp/lacylights-server.sha256 \
-  https://dist.lacylights.com/releases/go/lacylights-server-latest-arm64.sha256
+  https://dist.lacylights.com/releases/go/lacylights-server-${LATEST_VERSION}-arm64.sha256
 
 # Verify
 cd /tmp

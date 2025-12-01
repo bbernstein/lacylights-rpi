@@ -234,6 +234,10 @@ download_go_binary() {
 
     # Parse version and download URL
     VERSION=$(echo "$LATEST_JSON" | grep -o "\"version\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed -E 's/.*"([^"]*)".*/\1/')
+    if [ -z "$VERSION" ]; then
+        print_error "Failed to parse version from metadata"
+        rollback
+    fi
 
     # Construct binary-specific URL
     BINARY_URL="$DIST_BASE_URL/lacylights-server-${VERSION}-${BINARY_ARCH}"
@@ -272,7 +276,7 @@ download_go_binary() {
                 rollback
             fi
         elif command -v shasum &> /dev/null; then
-            EXPECTED=$(cat lacylights-server.sha256 | awk '{print $1}')
+            EXPECTED=$(awk '{print $1}' lacylights-server.sha256)
             ACTUAL=$(shasum -a 256 lacylights-server | awk '{print $1}')
             if [ "$EXPECTED" = "$ACTUAL" ]; then
                 print_success "Checksum verified"
@@ -350,7 +354,6 @@ Group=lacylights
 WorkingDirectory=/opt/lacylights/backend
 
 # Environment variables
-Environment="NODE_ENV=production"
 EnvironmentFile=/opt/lacylights/backend/.env
 
 # Start the Go backend server
@@ -412,6 +415,10 @@ update_env_config() {
             echo 'PORT=4000' | sudo tee -a "${BACKEND_DIR}/.env" > /dev/null
         fi
 
+        # Ensure correct ownership and permissions after any modifications
+        sudo chown lacylights:lacylights "${BACKEND_DIR}/.env"
+        sudo chmod 600 "${BACKEND_DIR}/.env"
+
         print_success "Environment configuration verified"
     else
         print_error ".env file not found"
@@ -446,6 +453,10 @@ verify_health() {
     print_info "Waiting for server to be ready..."
     sleep 5
 
+    # Extract PORT from .env, default to 4000 if not found
+    PORT=$(grep "^PORT=" "${BACKEND_DIR}/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "4000")
+    print_info "Using port: $PORT"
+
     # Try to connect to GraphQL endpoint
     print_info "Testing GraphQL endpoint..."
 
@@ -456,7 +467,7 @@ verify_health() {
         if curl -f -s -o /dev/null -X POST \
             -H "Content-Type: application/json" \
             -d '{"query":"{ __typename }"}' \
-            http://localhost:4000/graphql; then
+            http://localhost:${PORT}/graphql; then
             print_success "GraphQL endpoint is responding"
             return 0
         fi
@@ -526,6 +537,9 @@ EOF
 main() {
     print_header "LacyLights: Node to Go Backend Migration"
 
+    # Check root first
+    check_root
+
     print_info "This script will migrate your LacyLights installation from Node.js to Go backend"
     print_info "Log file: $LOG_FILE"
     print_warning "Please ensure you have a backup before proceeding"
@@ -542,7 +556,6 @@ main() {
     sudo chmod 644 "$LOG_FILE"
 
     # Run migration steps
-    check_root
     detect_backend_type
     detect_architecture
     create_backup
