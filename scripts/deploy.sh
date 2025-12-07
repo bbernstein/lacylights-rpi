@@ -243,13 +243,29 @@ if [ "$SKIP_LOCAL_BUILD" = false ]; then
         print_info "Building backend..."
         cd "$REPOS_DIR/lacylights-go"
 
+        # Detect Pi architecture for correct GOARCH
+        PI_ARCH=$(ssh "$PI_HOST" "uname -m")
+        case "$PI_ARCH" in
+            aarch64|arm64) GOARCH=arm64 ;;
+            armv7l|armhf) GOARCH=arm ;;
+            *) print_error "Unsupported architecture: $PI_ARCH"; exit 1 ;;
+        esac
+        print_info "Detected Pi architecture: $PI_ARCH, using GOARCH=$GOARCH"
+
         # Check if we have a Makefile or just compile directly
         if [ -f "Makefile" ]; then
             print_info "Building Go backend with make..."
-            make build-arm64
+            if grep -q "build-$GOARCH" Makefile && [ "$GOARCH" = "arm64" ]; then
+                make build-arm64
+            elif grep -q "build-arm" Makefile && [ "$GOARCH" = "arm" ]; then
+                make build-arm
+            else
+                print_info "No architecture-specific make target found, building with GOARCH=$GOARCH"
+                GOOS=linux GOARCH=$GOARCH go build -o lacylights-server ./cmd/server
+            fi
         elif [ -f "go.mod" ]; then
             print_info "Building Go backend..."
-            GOOS=linux GOARCH=arm64 go build -o lacylights-server ./cmd/server
+            GOOS=linux GOARCH=$GOARCH go build -o lacylights-server ./cmd/server
         fi
 
         if [ $? -eq 0 ]; then
@@ -323,7 +339,7 @@ if [ "$DEPLOY_BACKEND" = true ]; then
 
     # Sync backend to Pi (including built binary)
     print_info "Syncing Go backend binary and configuration to Raspberry Pi..."
-    rsync -avz --delete \
+    rsync -avz \
         --exclude '.git' \
         --exclude '.DS_Store' \
         --exclude 'coverage' \

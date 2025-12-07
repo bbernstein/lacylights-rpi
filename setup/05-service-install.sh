@@ -40,12 +40,12 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 # Install systemd service file (using Go backend service)
 print_info "Installing Go backend systemd service file..."
 
-if [ -f "$REPO_DIR/systemd/lacylights-go.service" ]; then
-    sudo cp "$REPO_DIR/systemd/lacylights-go.service" /etc/systemd/system/lacylights.service
+if [ -f "$REPO_DIR/systemd/lacylights.service" ]; then
+    sudo cp "$REPO_DIR/systemd/lacylights.service" /etc/systemd/system/lacylights.service
     sudo chmod 644 /etc/systemd/system/lacylights.service
     print_success "Go backend service file installed"
 else
-    print_error "Service file not found at $REPO_DIR/systemd/lacylights-go.service"
+    print_error "Service file not found at $REPO_DIR/systemd/lacylights.service"
     exit 1
 fi
 

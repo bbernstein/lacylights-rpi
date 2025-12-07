@@ -222,24 +222,36 @@ download_release() {
 print_header "Downloading Release Archives"
 
 # Download Go backend binaries for both architectures
-print_info "Downloading Go backend binaries..."
 DIST_BASE_URL="https://dist.lacylights.com/releases/go"
 
-# Fetch latest version info
-LATEST_JSON=$(curl -fsSL "$DIST_BASE_URL/latest.json" 2>/dev/null || echo "")
-if [ -z "$LATEST_JSON" ]; then
-    print_error "Failed to fetch Go backend version info"
-    exit 1
+# Determine Go backend version to use
+if [ -n "$BACKEND_VERSION" ] && [ "$BACKEND_VERSION" != "latest" ]; then
+    GO_VERSION="$BACKEND_VERSION"
+    print_info "Using specified Go backend version: $GO_VERSION"
+else
+    # Fetch latest version info
+    print_info "Downloading Go backend binaries..."
+    LATEST_JSON=$(curl -fsSL "$DIST_BASE_URL/latest.json" 2>/dev/null || echo "")
+    if [ -z "$LATEST_JSON" ]; then
+        print_error "Failed to fetch Go backend version info"
+        exit 1
+    fi
+    GO_VERSION=$(echo "$LATEST_JSON" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+    if [ -z "$GO_VERSION" ]; then
+        print_error "Failed to parse version from JSON"
+        exit 1
+    fi
+    print_info "Using latest Go backend version: $GO_VERSION"
 fi
-
-GO_VERSION=$(echo "$LATEST_JSON" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
-print_info "Go backend version: $GO_VERSION"
 
 # Download binaries for both arm64 and armhf
 for ARCH in arm64 armhf; do
     BINARY_URL="$DIST_BASE_URL/lacylights-server-${GO_VERSION}-${ARCH}"
     print_info "Downloading Go backend for $ARCH..."
-    curl -L -o "$OUTPUT_DIR/releases/backend-${ARCH}" "$BINARY_URL"
+    if ! curl -L -o "$OUTPUT_DIR/releases/backend-${ARCH}" "$BINARY_URL"; then
+        print_error "Failed to download Go backend binary for $ARCH"
+        exit 1
+    fi
 done
 print_success "Go backend binaries downloaded"
 

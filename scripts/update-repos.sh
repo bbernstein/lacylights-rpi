@@ -277,7 +277,7 @@ restore_from_backup() {
     if [ "$repo_name" = "lacylights-go" ]; then
         if [ -f "lacylights-server" ]; then
             chmod +x lacylights-server
-            chown lacylights:lacylights lacylights-server
+            sudo chown lacylights:lacylights lacylights-server
         fi
     elif [ -f "package.json" ]; then
         # Fix npm cache permissions before running npm commands

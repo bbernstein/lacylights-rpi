@@ -740,7 +740,6 @@ download_release() {
 }
 
 # Download Go backend binary
-echo "[INFO] Downloading Go backend version \$BACKEND_VERSION..."
 ARCH=\$(uname -m)
 case "\$ARCH" in
     aarch64|arm64) BINARY_ARCH="arm64" ;;
@@ -748,16 +747,27 @@ case "\$ARCH" in
     *) echo "[ERROR] Unsupported architecture: \$ARCH"; exit 1 ;;
 esac
 
-# Fetch latest version info from distribution server
 DIST_BASE_URL="https://dist.lacylights.com/releases/go"
-LATEST_JSON=\$(curl -fsSL "\$DIST_BASE_URL/latest.json" 2>/dev/null || echo "")
-if [ -z "\$LATEST_JSON" ]; then
-    echo "[ERROR] Failed to fetch Go backend version info"
-    exit 1
+
+if [ "\$BACKEND_VERSION" = "latest" ] || [ -z "\$BACKEND_VERSION" ]; then
+    # Fetch latest version info from distribution server
+    echo "[INFO] Downloading latest Go backend version..."
+    LATEST_JSON=\$(curl -fsSL "\$DIST_BASE_URL/latest.json" 2>/dev/null || echo "")
+    if [ -z "\$LATEST_JSON" ]; then
+        echo "[ERROR] Failed to fetch Go backend version info"
+        exit 1
+    fi
+    GO_VERSION=\$(echo "\$LATEST_JSON" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+    if [ -z "\$GO_VERSION" ]; then
+        echo "[ERROR] Failed to parse version from JSON"
+        exit 1
+    fi
+else
+    # Use specified backend version
+    echo "[INFO] Downloading Go backend version \$BACKEND_VERSION..."
+    GO_VERSION="\$BACKEND_VERSION"
 fi
 
-# Parse version and binary URL
-GO_VERSION=\$(echo "\$LATEST_JSON" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
 BINARY_URL="\$DIST_BASE_URL/lacylights-server-\${GO_VERSION}-\${BINARY_ARCH}"
 
 echo "[INFO] Downloading Go backend binary (version \$GO_VERSION, arch \$BINARY_ARCH)..."
