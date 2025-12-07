@@ -2,9 +2,6 @@
 
 # LacyLights Go Backend Service Installation
 # Installs and configures systemd service for Go backend
-#
-# Note: This script now uses the Go backend by default.
-# For the legacy Node.js backend, use 05-service-install-node.sh
 
 set -e
 
