@@ -221,7 +221,41 @@ download_release() {
 # Download all releases
 print_header "Downloading Release Archives"
 
-download_release "bbernstein/lacylights-node" "$BACKEND_VERSION" "backend"
+# Download Go backend binaries for both architectures
+DIST_BASE_URL="https://dist.lacylights.com/releases/go"
+
+# Determine Go backend version to use
+if [ -n "$BACKEND_VERSION" ] && [ "$BACKEND_VERSION" != "latest" ]; then
+    GO_VERSION="$BACKEND_VERSION"
+    print_info "Using specified Go backend version: $GO_VERSION"
+else
+    # Fetch latest version info
+    print_info "Downloading Go backend binaries..."
+    LATEST_JSON=$(curl -fsSL "$DIST_BASE_URL/latest.json" 2>/dev/null || echo "")
+    if [ -z "$LATEST_JSON" ]; then
+        print_error "Failed to fetch Go backend version info"
+        exit 1
+    fi
+    GO_VERSION=$(echo "$LATEST_JSON" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+    if [ -z "$GO_VERSION" ]; then
+        print_error "Failed to parse version from JSON"
+        exit 1
+    fi
+    print_info "Using latest Go backend version: $GO_VERSION"
+fi
+
+# Download binaries for both arm64 and armhf
+for ARCH in arm64 armhf; do
+    BINARY_URL="$DIST_BASE_URL/lacylights-server-${GO_VERSION}-${ARCH}"
+    print_info "Downloading Go backend for $ARCH..."
+    if ! curl -L -o "$OUTPUT_DIR/releases/backend-${ARCH}" "$BINARY_URL"; then
+        print_error "Failed to download Go backend binary for $ARCH"
+        exit 1
+    fi
+done
+print_success "Go backend binaries downloaded"
+
+# Download frontend and MCP
 download_release "bbernstein/lacylights-fe" "$FRONTEND_VERSION" "frontend"
 download_release "bbernstein/lacylights-mcp" "$MCP_VERSION" "mcp"
 
@@ -231,13 +265,14 @@ print_success "All releases downloaded"
 print_header "Preparing NPM Dependencies"
 
 print_info "This may take several minutes..."
+print_info "Note: Go backend is pre-built binary, skipping npm for backend"
 
 # Create temporary extraction directory
 TEMP_DIR="$OUTPUT_DIR/temp-extract"
 mkdir -p "$TEMP_DIR"
 
-# Process each project
-for project in backend frontend mcp; do
+# Process frontend and MCP only (backend is Go binary, not Node.js)
+for project in frontend mcp; do
     print_info "Processing $project dependencies..."
 
     # Extract archive
@@ -263,7 +298,7 @@ for project in backend frontend mcp; do
         # Create build artifacts archive
         print_info "Archiving build artifacts for $project..."
         if [ -d "dist" ]; then
-            # Backend and MCP use dist/
+            # MCP uses dist/
             archive_with_fallback "$OUTPUT_DIR/releases/${project}-dist.tar.gz" "dist/"
             print_success "$project dist/ archived"
         fi
@@ -361,12 +396,12 @@ print_header "Preparation Complete"
 print_success "Offline bundle ready!"
 print_info ""
 print_info "Bundle contents:"
-print_info "  - Backend release: $BACKEND_VERSION (pre-built)"
+print_info "  - Go backend binary: $GO_VERSION (arm64 + armhf)"
 print_info "  - Frontend release: $FRONTEND_VERSION (pre-built)"
 print_info "  - MCP release: $MCP_VERSION (pre-built)"
-print_info "  - NPM dependencies cache"
+print_info "  - NPM dependencies cache (frontend + MCP)"
 print_info "  - Pre-downloaded node_modules"
-print_info "  - Pre-built artifacts (dist/, .next/)"
+print_info "  - Pre-built artifacts (.next/ for frontend, dist/ for MCP)"
 print_info ""
 print_info "Bundle locations:"
 print_info "  - Directory: $OUTPUT_DIR"

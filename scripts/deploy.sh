@@ -151,8 +151,8 @@ print_info "  Restart: $([ "$SKIP_RESTART" = false ] && echo "✓" || echo "✗"
 # Check if repos exist
 print_header "Checking Prerequisites"
 
-if [ ! -d "$REPOS_DIR/lacylights-node" ]; then
-    print_error "Backend repository not found at $REPOS_DIR/lacylights-node"
+if [ ! -d "$REPOS_DIR/lacylights-go" ]; then
+    print_error "Backend repository not found at $REPOS_DIR/lacylights-go"
     exit 1
 fi
 
@@ -241,17 +241,33 @@ if [ "$SKIP_LOCAL_BUILD" = false ]; then
     # Build backend
     if [ "$DEPLOY_BACKEND" = true ]; then
         print_info "Building backend..."
-        cd "$REPOS_DIR/lacylights-node"
+        cd "$REPOS_DIR/lacylights-go"
 
-        # Install dependencies if needed
-        if [ ! -d "node_modules" ]; then
-            print_info "Installing backend dependencies..."
-            npm install
+        # Detect Pi architecture for correct GOARCH
+        PI_ARCH=$(ssh "$PI_HOST" "uname -m")
+        case "$PI_ARCH" in
+            aarch64|arm64) GOARCH=arm64 ;;
+            armv7l|armhf) GOARCH=arm ;;
+            *) print_error "Unsupported architecture: $PI_ARCH"; exit 1 ;;
+        esac
+        print_info "Detected Pi architecture: $PI_ARCH, using GOARCH=$GOARCH"
+
+        # Check if we have a Makefile or just compile directly
+        if [ -f "Makefile" ]; then
+            print_info "Building Go backend with make..."
+            if grep -q "build-$GOARCH" Makefile; then
+                make "build-$GOARCH"
+            else
+                print_info "No architecture-specific make target found, building with GOARCH=$GOARCH"
+                GOOS=linux GOARCH=$GOARCH go build -o lacylights-server ./cmd/server
+            fi
+        elif [ -f "go.mod" ]; then
+            print_info "Building Go backend..."
+            GOOS=linux GOARCH=$GOARCH go build -o lacylights-server ./cmd/server
+        else
+            print_error "No Makefile or go.mod found in Go backend repository"
+            exit 1
         fi
-
-        # Build
-        print_info "Compiling TypeScript..."
-        npm run build
 
         if [ $? -eq 0 ]; then
             print_success "Backend built successfully"
@@ -314,36 +330,37 @@ fi
 
 # Backend Deployment
 if [ "$DEPLOY_BACKEND" = true ]; then
-    print_header "Deploying Backend (lacylights-node)"
+    print_header "Deploying Backend (lacylights-go)"
 
-    cd "$REPOS_DIR/lacylights-node"
+    cd "$REPOS_DIR/lacylights-go"
 
     # Check current branch
     BACKEND_BRANCH=$(git branch --show-current)
     print_info "Current branch: $BACKEND_BRANCH"
 
-    # Type check backend
-    print_info "Running TypeScript type check..."
-    if npm run type-check 2>&1 | grep -q "error TS"; then
-        print_error "Backend type check failed"
-        print_error "Fix type errors before deploying"
-        exit 1
-    fi
-    print_success "Backend type check passed"
-
-    # Sync backend to Pi (including built dist/)
-    print_info "Syncing backend code and build artifacts to Raspberry Pi..."
-    rsync -avz --delete \
-        --exclude 'node_modules' \
+    # Sync backend to Pi (including built binary)
+    # Note: Not using --delete flag to preserve database files and runtime-generated content
+    print_info "Syncing Go backend binary and configuration to Raspberry Pi..."
+    rsync -avz \
         --exclude '.git' \
-        --exclude '.env.local' \
         --exclude '.DS_Store' \
         --exclude 'coverage' \
         --exclude '*.log' \
         --exclude '__tests__' \
+        --include 'lacylights-server' \
+        --include '.env' \
+        --include '.env.example' \
+        --exclude '.env.local' \
+        --include 'prisma/' \
+        --include 'prisma/***' \
+        --exclude '*' \
         ./ "$PI_HOST:$BACKEND_REMOTE/"
 
-    print_success "Backend code and build artifacts synced"
+    # Ensure binary is executable
+    print_info "Setting binary permissions..."
+    ssh "$PI_HOST" "chmod +x $BACKEND_REMOTE/lacylights-server && sudo chown lacylights:lacylights $BACKEND_REMOTE/lacylights-server"
+
+    print_success "Backend binary synced"
 fi
 
 # Frontend Deployment
@@ -420,9 +437,9 @@ ssh "$PI_HOST" << 'ENDSSH'
 set -e
 
 # Create symlinks in /opt/lacylights/repos/
-if [ ! -L /opt/lacylights/repos/lacylights-node ]; then
-    echo "[INFO] Creating symlink: lacylights-node -> backend"
-    sudo ln -sf /opt/lacylights/backend /opt/lacylights/repos/lacylights-node
+if [ ! -L /opt/lacylights/repos/lacylights-go ]; then
+    echo "[INFO] Creating symlink: lacylights-go -> backend"
+    sudo ln -sf /opt/lacylights/backend /opt/lacylights/repos/lacylights-go
 fi
 
 if [ ! -L /opt/lacylights/repos/lacylights-fe ]; then
@@ -488,25 +505,18 @@ else
     print_warning "Version management setup had some issues (non-critical)"
 fi
 
-# Rebuild on Pi (optional, slower)
+# Rebuild on Pi (optional, for frontend/MCP only - Go backend doesn't need rebuild)
 if [ "$REBUILD_ON_PI" = true ]; then
     print_header "Rebuilding Projects on Raspberry Pi"
 
     print_warning "Rebuilding on Pi is slower due to limited CPU"
     print_info "Consider using local builds (default) for faster deployments"
+    print_info "Note: Go backend is pre-built and doesn't need rebuilding on Pi"
     print_info ""
     print_info "Connecting to Raspberry Pi to rebuild..."
 
-    # Build commands based on what we deployed
+    # Build commands based on what we deployed (skip backend - it's a pre-built binary)
     BUILD_COMMANDS=""
-
-    if [ "$DEPLOY_BACKEND" = true ]; then
-        BUILD_COMMANDS+="echo '[INFO] Rebuilding backend...'
-cd $BACKEND_REMOTE
-npm install --production
-npm run build
-"
-    fi
 
     if [ "$DEPLOY_FRONTEND" = true ]; then
         BUILD_COMMANDS+="echo '[INFO] Rebuilding frontend...'
@@ -524,33 +534,32 @@ npm run build
 "
     fi
 
-    ssh "$PI_HOST" "$BUILD_COMMANDS"
+    if [ -n "$BUILD_COMMANDS" ]; then
+        ssh "$PI_HOST" "$BUILD_COMMANDS"
 
-    if [ $? -eq 0 ]; then
-        print_success "Rebuild on Pi completed successfully"
+        if [ $? -eq 0 ]; then
+            print_success "Rebuild on Pi completed successfully"
+        else
+            print_error "Rebuild failed on Pi"
+            exit 1
+        fi
     else
-        print_error "Rebuild failed on Pi"
-        exit 1
+        print_info "No components require rebuilding on Pi"
     fi
 else
     print_info "Skipping Pi rebuild (using locally built artifacts)"
 fi
 
 # Install production dependencies on Pi (only if we didn't already install during rebuild)
+# Note: Go backend doesn't need npm dependencies - it's a self-contained binary
 if [ "$REBUILD_ON_PI" = false ]; then
     print_header "Installing Production Dependencies on Pi"
 
     print_info "Installing runtime dependencies only..."
+    print_info "Note: Go backend is self-contained and doesn't require dependencies"
 
-    # Dependency installation commands based on what we deployed
+    # Dependency installation commands based on what we deployed (skip backend)
     INSTALL_COMMANDS=""
-
-    if [ "$DEPLOY_BACKEND" = true ]; then
-        INSTALL_COMMANDS+="echo '[INFO] Installing backend dependencies...'
-cd $BACKEND_REMOTE
-npm install --production
-"
-    fi
 
     if [ "$DEPLOY_FRONTEND" = true ]; then
         INSTALL_COMMANDS+="echo '[INFO] Installing frontend dependencies...'
@@ -566,13 +575,17 @@ npm install --production
 "
     fi
 
-    ssh "$PI_HOST" "$INSTALL_COMMANDS"
+    if [ -n "$INSTALL_COMMANDS" ]; then
+        ssh "$PI_HOST" "$INSTALL_COMMANDS"
 
-    if [ $? -eq 0 ]; then
-        print_success "Production dependencies installed"
+        if [ $? -eq 0 ]; then
+            print_success "Production dependencies installed"
+        else
+            print_error "Failed to install dependencies on Pi"
+            exit 1
+        fi
     else
-        print_error "Failed to install dependencies on Pi"
-        exit 1
+        print_info "No dependencies to install (Go backend is self-contained)"
     fi
 else
     print_info "Skipping separate dependency installation (already installed during rebuild)"

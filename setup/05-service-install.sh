@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# LacyLights Service Installation
-# Installs and configures systemd service
+# LacyLights Go Backend Service Installation
+# Installs and configures systemd service for Go backend
 
 set -e
 
@@ -31,19 +31,19 @@ print_header() {
     echo -e "${BLUE}========================================${NC}"
 }
 
-print_header "LacyLights Service Installation"
+print_header "LacyLights Go Backend Service Installation"
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Install systemd service file
-print_info "Installing systemd service file..."
+# Install systemd service file (using Go backend service)
+print_info "Installing Go backend systemd service file..."
 
 if [ -f "$REPO_DIR/systemd/lacylights.service" ]; then
     sudo cp "$REPO_DIR/systemd/lacylights.service" /etc/systemd/system/lacylights.service
     sudo chmod 644 /etc/systemd/system/lacylights.service
-    print_success "Service file installed"
+    print_success "Go backend service file installed"
 else
     print_error "Service file not found at $REPO_DIR/systemd/lacylights.service"
     exit 1
@@ -85,13 +85,14 @@ sudo systemctl enable lacylights
 print_success "Service enabled"
 
 print_header "Service Installation Complete"
-print_success "LacyLights service installed and enabled"
+print_success "LacyLights Go backend service installed and enabled"
 print_info ""
 print_info "The service will NOT start automatically yet."
 print_info "First, you need to:"
-print_info "  1. Deploy application code to /opt/lacylights/"
-print_info "  2. Run database migrations"
-print_info "  3. Start the service with: sudo systemctl start lacylights"
+print_info "  1. Download Go backend binary to /opt/lacylights/backend/lacylights-server"
+print_info "  2. Make it executable: chmod +x /opt/lacylights/backend/lacylights-server"
+print_info "  3. Set ownership: chown lacylights:lacylights /opt/lacylights/backend/lacylights-server"
+print_info "  4. Start the service with: sudo systemctl start lacylights"
 print_info ""
 print_info "Useful commands:"
 print_info "  sudo systemctl start lacylights    - Start the service"

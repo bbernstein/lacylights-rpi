@@ -17,7 +17,7 @@ Most common - updating your LacyLights application code:
 
 ```bash
 # On your development machine
-cd lacylights-node  # or lacylights-fe, lacylights-mcp
+cd lacylights-go  # or lacylights-fe, lacylights-mcp
 git pull origin main
 
 # Deploy to Pi
@@ -26,22 +26,27 @@ cd ../lacylights-rpi
 ```
 
 The deployment script automatically:
-- Type checks code
+- Builds Go binary locally (cross-compiled for ARM)
 - Syncs changes to Pi
-- Rebuilds on Pi
 - Restarts service
 - Runs health checks
+
+Note: The Go backend is a pre-compiled binary - there's no build step on the Pi.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
 ### Checking Application Version
 
 ```bash
-# Backend version
-ssh pi@lacylights.local 'cd /opt/lacylights/backend && npm version'
+# Backend version (check systemd service status)
+ssh pi@lacylights.local 'sudo systemctl status lacylights | grep "lacylights-server"'
+
+# Alternative: Check backend version directly (if binary supports --version flag)
+# Note: The binary must implement the --version flag for this to work
+# ssh pi@lacylights.local '/opt/lacylights/backend/lacylights-server --version'
 
 # Frontend version
-ssh pi@lacylights.local 'cd /opt/lacylights/frontend-src && npm version'
+ssh pi@lacylights.local 'cd /opt/lacylights/frontend-src && cat package.json | grep version'
 
 # Check what's running
 curl -s http://lacylights.local:4000/graphql \
@@ -164,7 +169,7 @@ On your development machine:
 
 ```bash
 # Check for outdated packages
-cd lacylights-node
+cd lacylights-go
 npm outdated
 
 # Update dependencies
@@ -438,7 +443,7 @@ sudo nano /etc/apticron/apticron.conf
 
 ```bash
 # On development machine
-cd lacylights-node
+cd lacylights-go
 git log --oneline  # Find commit to rollback to
 git checkout <previous-commit-hash>
 

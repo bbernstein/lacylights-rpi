@@ -567,7 +567,7 @@ ip addr show eth0
 **Solution:**
 ```bash
 # Fix type errors locally first
-cd lacylights-node  # or other repo
+cd lacylights-go  # or other repo
 npm run type-check
 
 # Fix errors shown

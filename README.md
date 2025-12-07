@@ -376,14 +376,14 @@ See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for comp
 **For fresh installation:** Release archives are downloaded directly from GitHub to the Pi during setup (no git repositories).
 
 **For development workflow:** Clone the application repositories locally:
-  - [lacylights-node](https://github.com/bbernstein/lacylights-node) (backend)
+  - [lacylights-go](https://github.com/bbernstein/lacylights-go) (Go backend - recommended)
   - [lacylights-fe](https://github.com/bbernstein/lacylights-fe) (frontend)
   - [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) (MCP server)
 
 **Recommended directory structure for development:**
 ```
 ~/src/lacylights/
-├── lacylights-node/    # Backend repository (for development)
+├── lacylights-go/      # Go backend repository (for development)
 ├── lacylights-fe/      # Frontend repository (for development)
 ├── lacylights-mcp/     # MCP server repository (for development)
 └── lacylights-rpi/     # This repository (deployment tools)
@@ -549,16 +549,16 @@ See [config/.env.example](config/.env.example) for all options.
 
 1. **Make changes locally**
    ```bash
-   cd lacylights-node  # or other repo
+   cd lacylights-go  # Go backend
    # Edit code
    git add .
    git commit -m "Add: new feature"
    ```
 
-2. **Type check locally**
+2. **Build and test locally**
    ```bash
-   npm run type-check
-   npm test
+   make build
+   make test
    ```
 
 3. **Deploy to Pi**
@@ -574,27 +574,24 @@ See [config/.env.example](config/.env.example) for all options.
 
 5. **Push to GitHub**
    ```bash
-   cd ../lacylights-node
+   cd ../lacylights-go
    git push origin main
    ```
 
 ### Quick Iteration
 
-For rapid development without rebuild:
+For rapid development:
 
 ```bash
-# Sync files only, no rebuild or restart
-./scripts/deploy.sh --skip-rebuild --skip-restart
+# Build locally and sync to Pi
+./scripts/deploy.sh
 
-# Make more changes and sync again
-./scripts/deploy.sh --skip-rebuild --skip-restart
-
-# When ready, rebuild and restart
+# When ready, restart service on Pi
 ssh pi@lacylights.local
-cd /opt/lacylights/backend
-npm run build
 sudo systemctl restart lacylights
 ```
+
+Note: The Go backend is a pre-compiled binary, so there's no build step on the Pi.
 
 ## Troubleshooting
 
@@ -622,23 +619,26 @@ ssh pi@lacylights.local 'sudo journalctl -u lacylights -n 50'
 
 # Common fixes
 ssh pi@lacylights.local << 'EOF'
-  # Rebuild
-  cd /opt/lacylights/backend
-  npm run build
+  # Check binary exists and is executable
+  ls -la /opt/lacylights/backend/lacylights-server
+
+  # Ensure correct permissions
+  sudo chown lacylights:lacylights /opt/lacylights/backend/lacylights-server
+  sudo chmod +x /opt/lacylights/backend/lacylights-server
 
   # Restart service
   sudo systemctl restart lacylights
 EOF
 ```
 
-### Type Check Fails
+### Build Fails
 
 ```bash
-# Fix type errors first
-cd lacylights-node  # or other repo
-npm run type-check
+# For Go backend, check build locally first
+cd lacylights-go
+make build
+make test
 
-# Fix shown errors
 # Then retry deployment
 ```
 
@@ -705,7 +705,7 @@ sudo systemctl start lacylights
 
 This is a deployment repository. For application code contributions:
 
-- Backend: [lacylights-node](https://github.com/bbernstein/lacylights-node)
+- Go Backend: [lacylights-go](https://github.com/bbernstein/lacylights-go) (recommended)
 - Frontend: [lacylights-fe](https://github.com/bbernstein/lacylights-fe)
 - MCP Server: [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp)
 
@@ -741,9 +741,6 @@ Once configured, create releases via GitHub Actions:
   - [WIFI_SETUP.md](docs/WIFI_SETUP.md) - WiFi configuration
   - [config/.env.example](config/.env.example) - Environment variables
 
-- **Backend Migration:**
-  - [GO_BACKEND_MIGRATION.md](docs/GO_BACKEND_MIGRATION.md) - Migrate from Node.js to Go backend
-
 - **Maintenance:**
   - [UPDATING.md](docs/UPDATING.md) - System updates
   - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - Common issues
@@ -758,27 +755,17 @@ Once configured, create releases via GitHub Actions:
   - [scripts/setup-new-pi.sh](scripts/setup-new-pi.sh) - Setup script
   - [install.sh](install.sh) - One-command installer
 
-## Backend Options
+## Backend
 
-LacyLights supports two backend implementations:
+LacyLights uses a Go backend for optimal performance on Raspberry Pi:
 
-### Go Backend (Recommended for new installations)
-- **Performance**: Faster startup, lower memory usage (~256MB vs ~512MB)
-- **Deployment**: Single compiled binary, no Node.js runtime needed
-- **Compatibility**: 100% API compatible with Node.js backend
-- **Status**: Production-ready
-
-### Node.js Backend (Legacy)
-- **Mature**: Battle-tested, original implementation
-- **Development**: Easier for TypeScript developers to modify
-- **Migration**: Existing installations can migrate to Go backend
-
-See [GO_BACKEND_MIGRATION.md](docs/GO_BACKEND_MIGRATION.md) for migration guide.
+- **Performance**: Fast startup, low memory usage (~256MB)
+- **Deployment**: Single compiled binary, no runtime dependencies
+- **Reliability**: Production-ready, battle-tested
 
 ## Related Repositories
 
 - [lacylights](https://github.com/bbernstein/lacylights) - Main documentation
-- [lacylights-node](https://github.com/bbernstein/lacylights-node) - Node.js Backend (GraphQL, DMX, Database)
 - [lacylights-go](https://github.com/bbernstein/lacylights-go) - Go Backend (GraphQL, DMX, Database)
 - [lacylights-fe](https://github.com/bbernstein/lacylights-fe) - Frontend (React, Next.js)
 - [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) - MCP Server (AI integration)

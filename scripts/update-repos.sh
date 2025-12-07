@@ -115,7 +115,7 @@ fix_npm_permissions() {
 get_dist_component() {
     local repo="$1"
     case "$repo" in
-        lacylights-node) echo "node" ;;
+        lacylights-go) echo "go" ;;
         lacylights-fe) echo "fe-static" ;;  # RPi uses static build
         lacylights-mcp) echo "mcp" ;;
         *) echo "" ;;
@@ -242,9 +242,9 @@ restore_from_backup() {
 
     # Stop service before restoring
     case "$repo_name" in
-        lacylights-node)
-            if systemctl is-active --quiet lacylights-backend; then
-                sudo systemctl stop lacylights-backend
+        lacylights-go)
+            if systemctl is-active --quiet lacylights; then
+                sudo systemctl stop lacylights
             fi
             ;;
         lacylights-fe)
@@ -269,15 +269,21 @@ restore_from_backup() {
         return 1
     fi
 
-    # Fix npm cache permissions before running npm commands
-    fix_npm_permissions
-
     # Reinstall dependencies and rebuild for the restored version
-    print_status "Reinstalling dependencies for restored $repo_name..."
+    print_status "Restoring dependencies for $repo_name..."
     pushd "$repo_dir" >/dev/null
 
-    # Install dependencies (production-only for npm repos)
-    if [ -f "package.json" ]; then
+    # For Go backend, just ensure the binary is executable
+    if [ "$repo_name" = "lacylights-go" ]; then
+        if [ -f "lacylights-server" ]; then
+            chmod +x lacylights-server
+            sudo chown lacylights:lacylights lacylights-server
+        fi
+    elif [ -f "package.json" ]; then
+        # Fix npm cache permissions before running npm commands
+        fix_npm_permissions
+
+        # Install dependencies (production-only for npm repos)
         if [ -f "package-lock.json" ]; then
             rm -rf node_modules
             if ! npm ci --production; then
@@ -287,34 +293,14 @@ restore_from_backup() {
         else
             npm install --production
         fi
-
-        # Rebuild if necessary (only for lacylights-node which needs build)
-        if [ "$repo_name" = "lacylights-node" ]; then
-            print_status "Rebuilding restored $repo_name..."
-            if ! npm run build; then
-                print_error "Build failed for restored $repo_name"
-                popd >/dev/null
-                return 1
-            fi
-        fi
-
-        # Run database migrations for lacylights-node
-        if [ "$repo_name" = "lacylights-node" ] && [ -f "prisma/schema.prisma" ]; then
-            print_status "Running database migrations for restored $repo_name..."
-            if ! npx prisma migrate deploy; then
-                print_error "Database migrations failed for restored $repo_name"
-                popd >/dev/null
-                return 1
-            fi
-        fi
     fi
 
     popd >/dev/null
 
     # Start service
     case "$repo_name" in
-        lacylights-node)
-            sudo systemctl start lacylights-backend || true
+        lacylights-go)
+            sudo systemctl start lacylights || true
             ;;
         lacylights-fe)
             sudo systemctl start lacylights-frontend || true
@@ -330,11 +316,11 @@ get_all_versions() {
     local output_format="${1:-text}"
 
     local fe_installed=$(get_installed_version "$REPOS_DIR/lacylights-fe")
-    local node_installed=$(get_installed_version "$REPOS_DIR/lacylights-node")
+    local go_installed=$(get_installed_version "$REPOS_DIR/lacylights-go")
     local mcp_installed=$(get_installed_version "$REPOS_DIR/lacylights-mcp")
 
     local fe_latest=$(get_latest_release_version "lacylights-fe")
-    local node_latest=$(get_latest_release_version "lacylights-node")
+    local go_latest=$(get_latest_release_version "lacylights-go")
     local mcp_latest=$(get_latest_release_version "lacylights-mcp")
 
     if [ "$output_format" = "json" ]; then
@@ -344,9 +330,9 @@ get_all_versions() {
     "installed": "$fe_installed",
     "latest": "$fe_latest"
   },
-  "lacylights-node": {
-    "installed": "$node_installed",
-    "latest": "$node_latest"
+  "lacylights-go": {
+    "installed": "$go_installed",
+    "latest": "$go_latest"
   },
   "lacylights-mcp": {
     "installed": "$mcp_installed",
@@ -356,7 +342,7 @@ get_all_versions() {
 EOF
     else
         echo "lacylights-fe: $fe_installed (latest: $fe_latest)"
-        echo "lacylights-node: $node_installed (latest: $node_latest)"
+        echo "lacylights-go: $go_installed (latest: $go_latest)"
         echo "lacylights-mcp: $mcp_installed (latest: $mcp_latest)"
     fi
 }
@@ -368,10 +354,10 @@ update_repo() {
 
     # Validate repo_name against whitelist
     case "$repo_name" in
-        "lacylights-fe"|"lacylights-node"|"lacylights-mcp")
+        "lacylights-fe"|"lacylights-go"|"lacylights-mcp")
             ;;
         *)
-            print_error "Invalid repository name: $repo_name. Must be one of: lacylights-fe, lacylights-node, lacylights-mcp"
+            print_error "Invalid repository name: $repo_name. Must be one of: lacylights-fe, lacylights-go, lacylights-mcp"
             return 1
             ;;
     esac
@@ -419,8 +405,8 @@ update_repo() {
         cp "$repo_dir/.env.local" "$temp_backup/.env.local"
     fi
 
-    # For lacylights-node, back up database if using SQLite
-    if [ "$repo_name" = "lacylights-node" ]; then
+    # For lacylights-go, back up database if using SQLite
+    if [ "$repo_name" = "lacylights-go" ]; then
         if [ -f "$repo_dir/lacylights.db" ]; then
             cp "$repo_dir/lacylights.db" "$temp_backup/lacylights.db"
         fi
@@ -559,9 +545,9 @@ update_repo() {
     # Stop services before replacing files
     print_status "Stopping $repo_name service..."
     case "$repo_name" in
-        lacylights-node)
-            if systemctl is-active --quiet lacylights-backend; then
-                sudo systemctl stop lacylights-backend
+        lacylights-go)
+            if systemctl is-active --quiet lacylights; then
+                sudo systemctl stop lacylights
             fi
             ;;
         lacylights-fe)
@@ -572,9 +558,9 @@ update_repo() {
         lacylights-mcp)
             # MCP doesn't have a standalone service, but backend depends on it
             # Stop backend so it can pick up new MCP version after update
-            if systemctl is-active --quiet lacylights-backend; then
+            if systemctl is-active --quiet lacylights; then
                 print_status "Stopping backend service to pick up new MCP version..."
-                sudo systemctl stop lacylights-backend
+                sudo systemctl stop lacylights
             fi
             ;;
     esac
@@ -604,8 +590,8 @@ update_repo() {
         cp "$temp_backup/.env.local" "$repo_dir/.env.local"
     fi
 
-    # Restore database for lacylights-node
-    if [ "$repo_name" = "lacylights-node" ]; then
+    # Restore database for lacylights-go
+    if [ "$repo_name" = "lacylights-go" ]; then
         if [ -f "$temp_backup/lacylights.db" ]; then
             cp "$temp_backup/lacylights.db" "$repo_dir/lacylights.db"
         fi
@@ -625,10 +611,26 @@ update_repo() {
 
     print_success "$repo_name extracted to $repo_dir"
 
-    # Install dependencies and build (skip for pre-built frontend)
+    # Install dependencies and build (skip for pre-built frontend and Go backend)
     if [ "$repo_name" = "lacylights-fe" ]; then
         # Frontend uses pre-built static export - no npm install or build needed
         print_success "Using pre-built static export for $repo_name (no build required)"
+    elif [ "$repo_name" = "lacylights-go" ]; then
+        # Go backend is a pre-built binary - just ensure it's executable
+        print_status "Setting up Go backend binary..."
+        pushd "$repo_dir" >/dev/null
+        if [ -f "lacylights-server" ]; then
+            chmod +x lacylights-server
+            sudo chown lacylights:lacylights lacylights-server
+            print_success "Go backend binary ready"
+        else
+            print_error "Go backend binary not found in archive"
+            print_status "Attempting to restore from backup..."
+            popd >/dev/null
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
+        fi
+        popd >/dev/null
     elif [ -f "$repo_dir/package.json" ]; then
         # Fix npm cache permissions before running npm commands
         fix_npm_permissions
@@ -691,36 +693,20 @@ update_repo() {
         fi
     fi
 
-    # Run database migrations for lacylights-node
-    if [ "$repo_name" = "lacylights-node" ] && [ -f "$repo_dir/prisma/schema.prisma" ]; then
-        print_status "Running database migrations for $repo_name..."
-        pushd "$repo_dir" >/dev/null
-        if npx prisma migrate deploy; then
-            print_success "Database migrations completed for $repo_name"
-        else
-            print_error "Database migrations failed - aborting service startup"
-            print_status "Attempting to restore from backup..."
-            popd >/dev/null
-            restore_from_backup "$backup_file" "$repo_name"
-            return 1
-        fi
-        popd >/dev/null
-    fi
-
     # Start services with automatic rollback on failure
     print_status "Starting $repo_name service..."
     case "$repo_name" in
-        lacylights-node)
+        lacylights-go)
             # Use || true to prevent script exit on start failure
-            sudo systemctl start lacylights-backend || true
+            sudo systemctl start lacylights || true
             # Retry with exponential backoff to allow service time to start
             local retry_count=0
             local max_retries=5
             local wait_time=1
             while [ $retry_count -lt $max_retries ]; do
                 sleep $wait_time
-                if sudo systemctl is-active --quiet lacylights-backend; then
-                    print_success "lacylights-backend service started successfully"
+                if sudo systemctl is-active --quiet lacylights; then
+                    print_success "lacylights service started successfully"
                     break
                 fi
                 retry_count=$((retry_count + 1))
@@ -731,7 +717,7 @@ update_repo() {
             done
 
             if [ $retry_count -eq $max_retries ]; then
-                print_error "Failed to start lacylights-backend service after $max_retries attempts"
+                print_error "Failed to start lacylights service after $max_retries attempts"
                 print_status "Attempting to restore from backup..."
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
@@ -767,15 +753,15 @@ update_repo() {
         lacylights-mcp)
             # MCP doesn't have a standalone service, restart backend to pick up new MCP version
             print_status "Restarting backend service to pick up new MCP version..."
-            sudo systemctl start lacylights-backend || true
+            sudo systemctl start lacylights || true
             # Retry with exponential backoff to allow service time to start
             local retry_count=0
             local max_retries=5
             local wait_time=1
             while [ $retry_count -lt $max_retries ]; do
                 sleep $wait_time
-                if sudo systemctl is-active --quiet lacylights-backend; then
-                    print_success "lacylights-backend service started successfully with new MCP version"
+                if sudo systemctl is-active --quiet lacylights; then
+                    print_success "lacylights service started successfully with new MCP version"
                     break
                 fi
                 retry_count=$((retry_count + 1))
@@ -786,7 +772,7 @@ update_repo() {
             done
 
             if [ $retry_count -eq $max_retries ]; then
-                print_error "Failed to start lacylights-backend service after $max_retries attempts"
+                print_error "Failed to start lacylights service after $max_retries attempts"
                 print_status "Attempting to restore from backup..."
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
@@ -843,7 +829,7 @@ main() {
             print_status "Updating all repositories to latest versions..."
             local failed=0
 
-            for repo in lacylights-node lacylights-fe lacylights-mcp; do
+            for repo in lacylights-go lacylights-fe lacylights-mcp; do
                 if ! update_repo "$repo" "latest"; then
                     failed=1
                 fi
@@ -870,7 +856,7 @@ Commands:
   available <repo>           List available versions for a repository
 
   update <repo> [version]    Update a repository to specific version
-                             repo: lacylights-fe, lacylights-node, or lacylights-mcp
+                             repo: lacylights-fe, lacylights-go, or lacylights-mcp
                              version: version tag (e.g., v1.2.3) or 'latest' (default)
 
   update-all                 Update all repositories to latest versions
@@ -880,8 +866,8 @@ Commands:
 Examples:
   $0 versions
   $0 versions json
-  $0 available lacylights-node
-  $0 update lacylights-node v1.3.0
+  $0 available lacylights-go
+  $0 update lacylights-go v1.3.0
   $0 update lacylights-fe latest
   $0 update-all
 
