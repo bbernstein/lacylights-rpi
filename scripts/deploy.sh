@@ -338,6 +338,7 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     print_info "Current branch: $BACKEND_BRANCH"
 
     # Sync backend to Pi (including built binary)
+    # Note: Not using --delete flag to preserve database files and runtime-generated content
     print_info "Syncing Go backend binary and configuration to Raspberry Pi..."
     rsync -avz \
         --exclude '.git' \
