@@ -1105,7 +1105,7 @@ print_success "All projects built"
 print_header "Step 11: Installing Service"
 print_info "Installing Go backend systemd service..."
 
-ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 05-service-install-go.sh"
+ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 05-service-install.sh"
 
 print_success "Service installed"
 

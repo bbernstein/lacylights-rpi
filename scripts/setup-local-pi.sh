@@ -148,7 +148,7 @@ bash "$SETUP_DIR/setup/04-permissions-setup.sh"
 
 # Step 5: Service Installation
 print_header "Step 5/7: Service Installation"
-bash "$SETUP_DIR/setup/05-service-install-go.sh"
+bash "$SETUP_DIR/setup/05-service-install.sh"
 
 # Step 6: Deploy LacyLights Applications
 print_header "Step 6/7: Deploying LacyLights Applications"
