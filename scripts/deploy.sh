@@ -255,10 +255,8 @@ if [ "$SKIP_LOCAL_BUILD" = false ]; then
         # Check if we have a Makefile or just compile directly
         if [ -f "Makefile" ]; then
             print_info "Building Go backend with make..."
-            if grep -q "build-$GOARCH" Makefile && [ "$GOARCH" = "arm64" ]; then
-                make build-arm64
-            elif grep -q "build-arm" Makefile && [ "$GOARCH" = "arm" ]; then
-                make build-arm
+            if grep -q "build-$GOARCH" Makefile; then
+                make "build-$GOARCH"
             else
                 print_info "No architecture-specific make target found, building with GOARCH=$GOARCH"
                 GOOS=linux GOARCH=$GOARCH go build -o lacylights-server ./cmd/server
@@ -354,7 +352,7 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --include '.env.example' \
         --exclude '.env.local' \
         --include 'prisma/' \
-        --include 'prisma/**' \
+        --include 'prisma/***' \
         --exclude '*' \
         ./ "$PI_HOST:$BACKEND_REMOTE/"
 

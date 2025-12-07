@@ -772,8 +772,16 @@ BINARY_URL="\$DIST_BASE_URL/lacylights-server-\${GO_VERSION}-\${BINARY_ARCH}"
 
 echo "[INFO] Downloading Go backend binary (version \$GO_VERSION, arch \$BINARY_ARCH)..."
 mkdir -p /opt/lacylights/backend
-curl -fsSL -o /opt/lacylights/backend/lacylights-server "\$BINARY_URL"
+if ! curl -fsSL -o /opt/lacylights/backend/lacylights-server "\$BINARY_URL"; then
+    echo "[ERROR] Failed to download Go backend binary from \$BINARY_URL"
+    exit 1
+fi
+if [ ! -f /opt/lacylights/backend/lacylights-server ] || [ ! -s /opt/lacylights/backend/lacylights-server ]; then
+    echo "[ERROR] Downloaded binary is missing or empty"
+    exit 1
+fi
 chmod +x /opt/lacylights/backend/lacylights-server
+chown lacylights:lacylights /opt/lacylights/backend/lacylights-server
 
 echo "[SUCCESS] Go backend binary ready"
 

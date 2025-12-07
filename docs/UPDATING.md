@@ -41,6 +41,10 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 # Backend version (check systemd service status)
 ssh pi@lacylights.local 'sudo systemctl status lacylights | grep "lacylights-server"'
 
+# Alternative: Check backend version directly (if binary supports --version flag)
+# Note: The binary must implement the --version flag for this to work
+# ssh pi@lacylights.local '/opt/lacylights/backend/lacylights-server --version'
+
 # Frontend version
 ssh pi@lacylights.local 'cd /opt/lacylights/frontend-src && cat package.json | grep version'
 
