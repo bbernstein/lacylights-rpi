@@ -38,8 +38,8 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 ### Checking Application Version
 
 ```bash
-# Backend version (Go binary)
-ssh pi@lacylights.local '/opt/lacylights/backend/lacylights-server --version'
+# Backend version (check systemd service status)
+ssh pi@lacylights.local 'sudo systemctl status lacylights | grep "lacylights-server"'
 
 # Frontend version
 ssh pi@lacylights.local 'cd /opt/lacylights/frontend-src && cat package.json | grep version'

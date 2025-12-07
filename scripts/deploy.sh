@@ -266,6 +266,9 @@ if [ "$SKIP_LOCAL_BUILD" = false ]; then
         elif [ -f "go.mod" ]; then
             print_info "Building Go backend..."
             GOOS=linux GOARCH=$GOARCH go build -o lacylights-server ./cmd/server
+        else
+            print_error "No Makefile or go.mod found in Go backend repository"
+            exit 1
         fi
 
         if [ $? -eq 0 ]; then
@@ -347,7 +350,9 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --exclude '*.log' \
         --exclude '__tests__' \
         --include 'lacylights-server' \
-        --include '.env*' \
+        --include '.env' \
+        --include '.env.example' \
+        --exclude '.env.local' \
         --include 'prisma/' \
         --include 'prisma/**' \
         --exclude '*' \
