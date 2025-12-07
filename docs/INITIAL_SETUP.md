@@ -212,8 +212,8 @@ ssh pi@lacylights.local
 
 # Download and extract releases manually (usually done by setup script):
 cd /tmp
-curl -L https://github.com/bbernstein/lacylights-node/archive/refs/tags/v1.1.0.tar.gz | tar -xz
-mv lacylights-node-* /opt/lacylights/backend
+curl -L https://github.com/bbernstein/lacylights-go/archive/refs/tags/v1.1.0.tar.gz | tar -xz
+mv lacylights-go-* /opt/lacylights/backend
 
 curl -L https://github.com/bbernstein/lacylights-fe/archive/refs/tags/v0.2.0.tar.gz | tar -xz
 mv lacylights-fe-* /opt/lacylights/frontend-src
@@ -222,7 +222,7 @@ curl -L https://github.com/bbernstein/lacylights-mcp/archive/refs/tags/v1.0.0.ta
 mv lacylights-mcp-* /opt/lacylights/mcp
 
 # Or for main branch:
-# curl -L https://github.com/bbernstein/lacylights-node/archive/refs/heads/main.tar.gz | tar -xz
+# curl -L https://github.com/bbernstein/lacylights-go/archive/refs/heads/main.tar.gz | tar -xz
 ```
 
 ### 6. Build Projects

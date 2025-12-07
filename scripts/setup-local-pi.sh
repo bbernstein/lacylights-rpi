@@ -148,7 +148,7 @@ bash "$SETUP_DIR/setup/04-permissions-setup.sh"
 
 # Step 5: Service Installation
 print_header "Step 5/7: Service Installation"
-bash "$SETUP_DIR/setup/05-service-install.sh"
+bash "$SETUP_DIR/setup/05-service-install-go.sh"
 
 # Step 6: Deploy LacyLights Applications
 print_header "Step 6/7: Deploying LacyLights Applications"
@@ -197,7 +197,7 @@ get_latest_release() {
 # Determine versions to deploy
 if [ -z "$BACKEND_VERSION" ]; then
     print_info "Fetching latest backend version..."
-    BACKEND_VERSION=$(get_latest_release "lacylights-node")
+    BACKEND_VERSION=$(get_latest_release "lacylights-go")
     print_info "Using backend version: $BACKEND_VERSION"
 fi
 
@@ -213,54 +213,47 @@ if [ -z "$MCP_VERSION" ]; then
     print_info "Using MCP version: $MCP_VERSION"
 fi
 
-# Deploy Backend
-print_info "Deploying backend ($BACKEND_VERSION)..."
-cd /opt/lacylights/backend
-if [ "$BACKEND_VERSION" = "main" ]; then
-    curl -fsSL "https://github.com/bbernstein/lacylights-node/archive/refs/heads/main.tar.gz" | tar xz --strip-components=1
-else
-    curl -fsSL "https://github.com/bbernstein/lacylights-node/archive/refs/tags/${BACKEND_VERSION}.tar.gz" | tar xz --strip-components=1
-fi
+# Deploy Go Backend
+print_info "Deploying Go backend ($BACKEND_VERSION)..."
 
-# Set ownership before installing dependencies
-chown -R pi:pi /opt/lacylights/backend
+# Detect architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+    aarch64|arm64) BINARY_ARCH="arm64" ;;
+    armv7l|armhf) BINARY_ARCH="armhf" ;;
+    *) print_error "Unsupported architecture: $ARCH"; exit 1 ;;
+esac
 
-# Install backend dependencies (including dev dependencies for build)
-print_info "Installing backend dependencies..."
-sudo -u pi npm ci
-
-# Build backend
-print_info "Building backend..."
-if ! sudo -u pi bash -c 'cd /opt/lacylights/backend && export PATH="./node_modules/.bin:$PATH" && npm run build'; then
-    print_error "Backend build failed"
+# Fetch latest version info from distribution server
+DIST_BASE_URL="https://dist.lacylights.com/releases/go"
+LATEST_JSON=$(curl -fsSL "$DIST_BASE_URL/latest.json" 2>/dev/null || echo "")
+if [ -z "$LATEST_JSON" ]; then
+    print_error "Failed to fetch Go backend version info"
     exit 1
 fi
 
-# Verify build output exists
-if [ ! -d /opt/lacylights/backend/dist ]; then
-    print_error "Backend build output (dist directory) not found"
-    exit 1
-fi
+# Parse version and binary URL
+GO_VERSION=$(echo "$LATEST_JSON" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+BINARY_URL="$DIST_BASE_URL/lacylights-server-${GO_VERSION}-${BINARY_ARCH}"
 
-print_success "Backend build completed successfully"
+print_info "Downloading Go backend binary (version $GO_VERSION, arch $BINARY_ARCH)..."
+mkdir -p /opt/lacylights/backend
+curl -fsSL -o /opt/lacylights/backend/lacylights-server "$BINARY_URL"
+chmod +x /opt/lacylights/backend/lacylights-server
 
-# Remove dev dependencies after build to save space
-print_info "Removing dev dependencies..."
-sudo -u pi npm prune --omit=dev
-
-# Create temp directory for fixture downloads
-print_info "Creating temp directory..."
-sudo -u pi mkdir -p /opt/lacylights/backend/temp
+# Set ownership
+chown -R lacylights:lacylights /opt/lacylights/backend
 
 # Copy environment file if it doesn't exist
 if [ ! -f /opt/lacylights/backend/.env ]; then
     if [ -f "$SETUP_DIR/config/.env.example" ]; then
         cp "$SETUP_DIR/config/.env.example" /opt/lacylights/backend/.env
+        chown lacylights:lacylights /opt/lacylights/backend/.env
         print_success "Environment file created from example"
     fi
 fi
 
-print_success "Backend deployed successfully"
+print_success "Go backend deployed successfully"
 
 # Deploy Frontend
 print_info "Deploying frontend ($FRONTEND_VERSION)..."
@@ -347,19 +340,17 @@ chown -R lacylights:lacylights /opt/lacylights/backend
 chown -R pi:pi /opt/lacylights/frontend-src
 chown -R pi:pi /opt/lacylights/mcp
 
-# Run database migrations (after ownership change)
-print_info "Running database migrations..."
-sudo -u lacylights bash -c 'cd /opt/lacylights/backend && export PATH="./node_modules/.bin:$PATH" && npx prisma migrate deploy'
-print_success "Database migrations completed"
+# Note: Go backend doesn't require database migrations - handled automatically
+print_info "Go backend handles database setup automatically on startup"
 
 # Setup version management symlinks
 print_header "Setting Up Version Management"
 print_info "Creating symlinks for version management..."
 
 # Create symlinks in /opt/lacylights/repos/
-if [ ! -L /opt/lacylights/repos/lacylights-node ]; then
-    print_info "Creating symlink: lacylights-node -> backend"
-    ln -sf /opt/lacylights/backend /opt/lacylights/repos/lacylights-node
+if [ ! -L /opt/lacylights/repos/lacylights-go ]; then
+    print_info "Creating symlink: lacylights-go -> backend"
+    ln -sf /opt/lacylights/backend /opt/lacylights/repos/lacylights-go
 fi
 
 if [ ! -L /opt/lacylights/repos/lacylights-fe ]; then

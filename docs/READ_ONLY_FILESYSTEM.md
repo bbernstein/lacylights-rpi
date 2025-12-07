@@ -90,7 +90,7 @@ sudo /opt/lacylights/scripts/update-repos-wrapper.sh update lacylights-fe latest
 ### Update Backend to Latest
 
 ```bash
-sudo /opt/lacylights/scripts/update-repos-wrapper.sh update lacylights-node latest
+sudo /opt/lacylights/scripts/update-repos-wrapper.sh update lacylights-go latest
 ```
 
 ### Update All Components

@@ -110,7 +110,7 @@ The deployment script performs these steps:
 ### After Changing Backend Code
 
 ```bash
-cd lacylights-node
+cd lacylights-go
 # Make changes
 git add .
 git commit -m "Fix: improve DMX timing"
@@ -148,7 +148,7 @@ ssh pi@lacylights.local 'sudo systemctl restart lacylights'
 **Solution:**
 ```bash
 # Fix type errors first
-cd lacylights-node  # or lacylights-fe
+cd lacylights-go  # or lacylights-fe
 npm run type-check
 # Fix errors, then retry deployment
 ```
@@ -218,7 +218,7 @@ If the automated script doesn't work, you can deploy manually:
 ```bash
 # Backend
 rsync -avz --delete --exclude 'node_modules' --exclude '.git' \
-    lacylights-node/ pi@lacylights.local:/opt/lacylights/backend/
+    lacylights-go/ pi@lacylights.local:/opt/lacylights/backend/
 
 # Frontend
 rsync -avz --delete --exclude 'node_modules' --exclude '.git' \
@@ -273,7 +273,7 @@ If deployment causes issues, you can rollback:
 ### Git Rollback
 
 ```bash
-cd lacylights-node  # or other repo
+cd lacylights-go  # or other repo
 git revert HEAD
 # or
 git reset --hard HEAD~1
@@ -309,7 +309,7 @@ RSYNC_OPTS="-avz --progress" ./scripts/deploy.sh
 ### Deploy from Different Branch
 
 ```bash
-cd lacylights-node
+cd lacylights-go
 git checkout develop
 cd ../lacylights-rpi
 ./scripts/deploy.sh --backend-only

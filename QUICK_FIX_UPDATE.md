@@ -48,7 +48,7 @@ cd /tmp
 sudo /opt/lacylights/scripts/update-repos-wrapper.sh update lacylights-fe latest
 
 # Update backend
-sudo /opt/lacylights/scripts/update-repos-wrapper.sh update lacylights-node latest
+sudo /opt/lacylights/scripts/update-repos-wrapper.sh update lacylights-go latest
 
 # Update all components
 sudo /opt/lacylights/scripts/update-repos-wrapper.sh update-all

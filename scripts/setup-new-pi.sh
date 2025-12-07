@@ -739,8 +739,33 @@ download_release() {
     echo "[SUCCESS] \$repo_name ready at \$dest"
 }
 
-# Download backend
-download_release "bbernstein/lacylights-node" "$BACKEND_VERSION" "/opt/lacylights/backend"
+# Download Go backend binary
+echo "[INFO] Downloading Go backend version \$BACKEND_VERSION..."
+ARCH=\$(uname -m)
+case "\$ARCH" in
+    aarch64|arm64) BINARY_ARCH="arm64" ;;
+    armv7l|armhf) BINARY_ARCH="armhf" ;;
+    *) echo "[ERROR] Unsupported architecture: \$ARCH"; exit 1 ;;
+esac
+
+# Fetch latest version info from distribution server
+DIST_BASE_URL="https://dist.lacylights.com/releases/go"
+LATEST_JSON=\$(curl -fsSL "\$DIST_BASE_URL/latest.json" 2>/dev/null || echo "")
+if [ -z "\$LATEST_JSON" ]; then
+    echo "[ERROR] Failed to fetch Go backend version info"
+    exit 1
+fi
+
+# Parse version and binary URL
+GO_VERSION=\$(echo "\$LATEST_JSON" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)".*/\1/')
+BINARY_URL="\$DIST_BASE_URL/lacylights-server-\${GO_VERSION}-\${BINARY_ARCH}"
+
+echo "[INFO] Downloading Go backend binary (version \$GO_VERSION, arch \$BINARY_ARCH)..."
+mkdir -p /opt/lacylights/backend
+curl -fsSL -o /opt/lacylights/backend/lacylights-server "\$BINARY_URL"
+chmod +x /opt/lacylights/backend/lacylights-server
+
+echo "[SUCCESS] Go backend binary ready"
 
 # Download frontend
 download_release "bbernstein/lacylights-fe" "$FRONTEND_VERSION" "/opt/lacylights/frontend-src"
@@ -1017,19 +1042,13 @@ print_success "Configuration files created"
 # Build projects (while still owned by pi user)
 print_header "Step 10: Building Projects"
 if [ -z "$OFFLINE_BUNDLE" ]; then
-    print_info "Building backend, frontend, and MCP (ONLINE MODE)..."
-    print_info "Note: Building as pi user before transferring ownership to lacylights"
+    print_info "Building frontend and MCP (ONLINE MODE)..."
+    print_info "Note: Go backend is pre-built binary, only building Node.js projects"
 
     ssh "$PI_HOST" << 'ENDSSH'
 set -e
 
-echo "[INFO] Building backend..."
-cd /opt/lacylights/backend
-npm install
-npm run build
-
-echo "[INFO] Running database migrations..."
-npx prisma migrate deploy
+echo "[INFO] Go backend is pre-built binary - no build needed"
 
 echo "[INFO] Building frontend..."
 cd /opt/lacylights/frontend-src
@@ -1047,18 +1066,12 @@ ENDSSH
 
 else
     print_info "Using pre-built artifacts from offline bundle (OFFLINE MODE)..."
-    print_info "Note: Only rebuilding native modules for ARM architecture"
+    print_info "Note: Go backend is pre-built, only rebuilding Node.js native modules"
 
     ssh "$PI_HOST" << 'OFFLINE_BUILD'
 set -e
 
-echo "[INFO] Rebuilding backend native modules..."
-cd /opt/lacylights/backend
-npm rebuild
-
-echo "[INFO] Running database migrations..."
-npx prisma generate
-npx prisma migrate deploy
+echo "[INFO] Go backend is pre-built binary - no rebuild needed"
 
 echo "[INFO] Rebuilding frontend native modules..."
 cd /opt/lacylights/frontend-src
@@ -1080,9 +1093,9 @@ print_success "All projects built"
 
 # Install service
 print_header "Step 11: Installing Service"
-print_info "Installing systemd service..."
+print_info "Installing Go backend systemd service..."
 
-ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 05-service-install.sh"
+ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 05-service-install-go.sh"
 
 print_success "Service installed"
 
