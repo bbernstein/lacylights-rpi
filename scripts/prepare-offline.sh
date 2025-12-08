@@ -244,9 +244,10 @@ else
     print_info "Using latest Go backend version: $GO_VERSION"
 fi
 
-# Download binaries for both arm64 and armhf
-for ARCH in arm64 armhf; do
-    BINARY_URL="$DIST_BASE_URL/lacylights-server-${GO_VERSION}-${ARCH}"
+# Download binaries for both arm64 and arm (ARM32)
+# Using versioned directory structure: releases/go/v{VERSION}/lacylights-linux-{ARCH}
+for ARCH in arm64 arm; do
+    BINARY_URL="$DIST_BASE_URL/v${GO_VERSION}/lacylights-linux-${ARCH}"
     print_info "Downloading Go backend for $ARCH..."
     if ! curl -L -o "$OUTPUT_DIR/releases/backend-${ARCH}" "$BINARY_URL"; then
         print_error "Failed to download Go backend binary for $ARCH"

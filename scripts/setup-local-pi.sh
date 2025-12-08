@@ -218,7 +218,7 @@ fi
 ARCH=$(uname -m)
 case "$ARCH" in
     aarch64|arm64) BINARY_ARCH="arm64" ;;
-    armv7l|armhf) BINARY_ARCH="armhf" ;;
+    armv7l|armhf) BINARY_ARCH="arm" ;;  # GOARCH=arm for ARM32
     *) print_error "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
@@ -244,7 +244,8 @@ else
     print_info "Deploying latest Go backend version $GO_VERSION..."
 fi
 
-BINARY_URL="$DIST_BASE_URL/lacylights-server-${GO_VERSION}-${BINARY_ARCH}"
+# Versioned URL structure: releases/go/v{VERSION}/lacylights-linux-{ARCH}
+BINARY_URL="$DIST_BASE_URL/v${GO_VERSION}/lacylights-linux-${BINARY_ARCH}"
 
 print_info "Downloading Go backend binary (version $GO_VERSION, arch $BINARY_ARCH)..."
 mkdir -p /opt/lacylights/backend

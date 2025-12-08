@@ -38,9 +38,21 @@ jobs:
       - name: Calculate new version
         id: version
         run: |
-          # Get the latest tag (could be stable or beta)
-          CURRENT_VERSION=$(git tag -l 'v*' | sort -V | tail -n1 | sed 's/^v//' || echo "0.0.0")
-          echo "Current version: $CURRENT_VERSION"
+          # Get all version tags and find highest stable and highest beta separately
+          # This fixes issues where git's version sort doesn't follow semver rules
+          ALL_TAGS=$(git tag -l 'v*' | sed 's/^v//')
+
+          echo "All version tags:"
+          echo "$ALL_TAGS" | head -10
+
+          # Find highest stable version (no prerelease suffix)
+          HIGHEST_STABLE=$(echo "$ALL_TAGS" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || echo "")
+
+          # Find highest beta version
+          HIGHEST_BETA=$(echo "$ALL_TAGS" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$' | sort -V | tail -n 1 || echo "")
+
+          echo "Highest stable: ${HIGHEST_STABLE:-none}"
+          echo "Highest beta: ${HIGHEST_BETA:-none}"
 
           VERSION_BUMP="${{ github.event.inputs.version_bump }}"
           IS_PRERELEASE="${{ github.event.inputs.is_prerelease }}"
@@ -48,106 +60,91 @@ jobs:
           echo "Version bump: $VERSION_BUMP"
           echo "Is prerelease: $IS_PRERELEASE"
 
-          # Normalize old format to new format if needed (self-correction)
-          # Old format: X.Y.Zb[N] or X.Y.Z-b[N]
-          # New format: X.Y.Z-beta.[N]
-          if [[ "$CURRENT_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-?b([0-9]+)$ ]]; then
-            echo "⚠️  Old format detected: $CURRENT_VERSION"
-            BASE_VERSION="${BASH_REMATCH[1]}"
-            BETA_NUMBER="${BASH_REMATCH[2]}"
-            CURRENT_VERSION="${BASE_VERSION}-beta.${BETA_NUMBER}"
-            echo "✓ Normalized to: $CURRENT_VERSION"
+          # Helper function to bump version
+          bump_version() {
+            local version="$1"
+            local bump_type="$2"
+            IFS='.' read -ra parts <<< "$version"
+            local major="${parts[0]:-0}"
+            local minor="${parts[1]:-0}"
+            local patch="${parts[2]:-0}"
+
+            case "$bump_type" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+            esac
+            echo "${major}.${minor}.${patch}"
+          }
+
+          # Parse beta info if exists
+          BETA_BASE=""
+          BETA_NUMBER=0
+          if [ -n "$HIGHEST_BETA" ]; then
+            if [[ "$HIGHEST_BETA" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
+              BETA_BASE="${BASH_REMATCH[1]}"
+              BETA_NUMBER="${BASH_REMATCH[2]}"
+            fi
           fi
 
-          # Detect if current version is a beta (semver format: X.Y.Z-beta.[N])
-          if [[ "$CURRENT_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
-            IS_CURRENT_BETA=true
-            BASE_VERSION="${BASH_REMATCH[1]}"
-            BETA_NUMBER="${BASH_REMATCH[2]}"
-            echo "Detected beta: base=$BASE_VERSION, beta=$BETA_NUMBER"
-          else
-            IS_CURRENT_BETA=false
-            BASE_VERSION="$CURRENT_VERSION"
-            echo "Detected stable: $BASE_VERSION"
-          fi
+          # Default stable to 0.0.0 if not set
+          HIGHEST_STABLE="${HIGHEST_STABLE:-0.0.0}"
 
-          # Validate base version format before parsing
-          if ! [[ "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Error: Invalid base version format: $BASE_VERSION"
-            exit 1
-          fi
-
-          # Parse base version
-          IFS='.' read -ra VERSION_PARTS <<< "$BASE_VERSION"
-          MAJOR="${VERSION_PARTS[0]:-0}"
-          MINOR="${VERSION_PARTS[1]:-0}"
-          PATCH="${VERSION_PARTS[2]:-0}"
-
-          # Validate that we have valid numbers
-          if ! [[ "$MAJOR" =~ ^[0-9]+$ ]] || ! [[ "$MINOR" =~ ^[0-9]+$ ]] || ! [[ "$PATCH" =~ ^[0-9]+$ ]]; then
-            echo "Error: Invalid version format: $BASE_VERSION"
-            exit 1
-          fi
-
-          # Decision logic - handles 4 scenarios correctly (semver-compatible)
           if [ "$IS_PRERELEASE" = "true" ]; then
-            if [ "$IS_CURRENT_BETA" = "true" ]; then
-              # Scenario 1: Beta -> Next Beta (increment beta number ONLY, ignore version_bump)
-              echo "⚠️  Warning: version_bump '$VERSION_BUMP' ignored for beta-to-beta increment"
-              BETA_NUMBER=$((BETA_NUMBER + 1))
-              NEW_VERSION="${BASE_VERSION}-beta.${BETA_NUMBER}"
-              echo "Scenario: Beta -> Next Beta"
+            # Creating a prerelease (beta)
+
+            if [ -n "$BETA_BASE" ]; then
+              # There's an existing beta series
+              # Check if stable release exists for this beta's base version
+              STABLE_GTE_BETA_BASE="false"
+              if [ "$HIGHEST_STABLE" != "0.0.0" ]; then
+                COMPARE_RESULT=$(printf '%s\n%s' "$HIGHEST_STABLE" "$BETA_BASE" | sort -V | tail -n 1)
+                if [ "$COMPARE_RESULT" = "$HIGHEST_STABLE" ]; then
+                  STABLE_GTE_BETA_BASE="true"
+                fi
+              fi
+
+              echo "Beta base: $BETA_BASE, Stable >= Beta base: $STABLE_GTE_BETA_BASE"
+
+              if [ "$STABLE_GTE_BETA_BASE" = "true" ]; then
+                # Stable release exists for beta base version (or higher)
+                # Start a NEW beta series from bumped stable version
+                NEW_BASE=$(bump_version "$HIGHEST_STABLE" "$VERSION_BUMP")
+                NEW_VERSION="${NEW_BASE}-beta.1"
+                echo "Scenario: Stable exists for beta base -> New beta series from $HIGHEST_STABLE"
+              else
+                # No stable release for beta base yet, continue the beta series
+                BETA_NUMBER=$((BETA_NUMBER + 1))
+                NEW_VERSION="${BETA_BASE}-beta.${BETA_NUMBER}"
+                echo "Scenario: Continue beta series -> ${BETA_BASE}-beta.${BETA_NUMBER}"
+              fi
             else
-              # Scenario 2: Stable -> First Beta (apply version_bump, add -beta.1)
-              case "$VERSION_BUMP" in
-                major)
-                  MAJOR=$((MAJOR + 1))
-                  MINOR=0
-                  PATCH=0
-                  ;;
-                minor)
-                  MINOR=$((MINOR + 1))
-                  PATCH=0
-                  ;;
-                patch)
-                  PATCH=$((PATCH + 1))
-                  ;;
-                *)
-                  echo "Error: Invalid version_bump value: $VERSION_BUMP"
-                  exit 1
-                  ;;
-              esac
-              NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}-beta.1"
-              echo "Scenario: Stable -> First Beta"
+              # No existing beta, start new beta series from stable
+              NEW_BASE=$(bump_version "$HIGHEST_STABLE" "$VERSION_BUMP")
+              NEW_VERSION="${NEW_BASE}-beta.1"
+              echo "Scenario: No beta exists -> First beta from stable $HIGHEST_STABLE"
             fi
           else
-            if [ "$IS_CURRENT_BETA" = "true" ]; then
-              # Scenario 3: Beta -> Stable (finalize by removing beta suffix)
-              echo "⚠️  Warning: version_bump '$VERSION_BUMP' ignored for beta-to-stable finalization"
-              NEW_VERSION="$BASE_VERSION"
-              echo "Scenario: Beta -> Stable Finalization"
+            # Creating a stable release
+
+            if [ -n "$BETA_BASE" ]; then
+              # Check if this beta should be finalized
+              # Only finalize if no stable >= beta base exists
+              COMPARE_RESULT=$(printf '%s\n%s' "$HIGHEST_STABLE" "$BETA_BASE" | sort -V | tail -n 1)
+
+              if [ "$HIGHEST_STABLE" = "0.0.0" ] || [ "$COMPARE_RESULT" = "$BETA_BASE" ]; then
+                # No stable release for beta base yet -> finalize beta
+                NEW_VERSION="$BETA_BASE"
+                echo "Scenario: Finalize beta -> $BETA_BASE"
+              else
+                # Stable already >= beta base -> normal bump from stable
+                NEW_VERSION=$(bump_version "$HIGHEST_STABLE" "$VERSION_BUMP")
+                echo "Scenario: Stable bump (beta already finalized) -> $NEW_VERSION"
+              fi
             else
-              # Scenario 4: Stable -> Stable (normal version bump)
-              case "$VERSION_BUMP" in
-                major)
-                  MAJOR=$((MAJOR + 1))
-                  MINOR=0
-                  PATCH=0
-                  ;;
-                minor)
-                  MINOR=$((MINOR + 1))
-                  PATCH=0
-                  ;;
-                patch)
-                  PATCH=$((PATCH + 1))
-                  ;;
-                *)
-                  echo "Error: Invalid version_bump value: $VERSION_BUMP"
-                  exit 1
-                  ;;
-              esac
-              NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-              echo "Scenario: Stable -> Stable"
+              # No beta, normal stable bump
+              NEW_VERSION=$(bump_version "$HIGHEST_STABLE" "$VERSION_BUMP")
+              echo "Scenario: Normal stable bump -> $NEW_VERSION"
             fi
           fi
 
@@ -350,7 +347,6 @@ jobs:
           SHA256="${{ steps.checksum.outputs.sha256 }}"
           FILE_SIZE="${{ steps.checksum.outputs.file_size }}"
           RELEASE_DATE="${{ steps.checksum.outputs.release_date }}"
-          IS_PRERELEASE="${{ steps.checksum.outputs.is_prerelease }}"
 
           # Create latest.json
           cat > latest.json <<EOF
@@ -359,7 +355,7 @@ jobs:
             "url": "https://dist.lacylights.com/releases/${COMPONENT}/$ARTIFACT",
             "sha256": "$SHA256",
             "releaseDate": "$RELEASE_DATE",
-            "isPrerelease": $IS_PRERELEASE,
+            "isPrerelease": false,
             "fileSize": $FILE_SIZE,
             "installScript": "https://dist.lacylights.com/releases/${COMPONENT}/install.sh"
           }
@@ -369,9 +365,47 @@ jobs:
           aws s3 cp latest.json \
             "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${COMPONENT}/latest.json" \
             --content-type "application/json" \
+            --cache-control "max-age=300, must-revalidate" \
             --metadata-directive REPLACE
 
           echo "✓ latest.json updated"
+
+      - name: Update prerelease.json
+        if: steps.checksum.outputs.is_prerelease == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          COMPONENT="rpi"
+          VERSION="${{ steps.version.outputs.version }}"
+          ARTIFACT="${{ steps.checksum.outputs.artifact }}"
+          SHA256="${{ steps.checksum.outputs.sha256 }}"
+          FILE_SIZE="${{ steps.checksum.outputs.file_size }}"
+          RELEASE_DATE="${{ steps.checksum.outputs.release_date }}"
+
+          # Create prerelease.json
+          cat > prerelease.json <<EOF
+          {
+            "version": "$VERSION",
+            "url": "https://dist.lacylights.com/releases/${COMPONENT}/$ARTIFACT",
+            "sha256": "$SHA256",
+            "releaseDate": "$RELEASE_DATE",
+            "isPrerelease": true,
+            "fileSize": $FILE_SIZE,
+            "installScript": "https://dist.lacylights.com/releases/${COMPONENT}/install.sh"
+          }
+          EOF
+
+          echo "Uploading prerelease.json..."
+          aws s3 cp prerelease.json \
+            "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${COMPONENT}/prerelease.json" \
+            --content-type "application/json" \
+            --cache-control "max-age=300, must-revalidate" \
+            --metadata-directive REPLACE
+
+          echo "✓ prerelease.json updated"
 
       - name: Update DynamoDB
         env:
