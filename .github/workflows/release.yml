@@ -350,7 +350,6 @@ jobs:
           SHA256="${{ steps.checksum.outputs.sha256 }}"
           FILE_SIZE="${{ steps.checksum.outputs.file_size }}"
           RELEASE_DATE="${{ steps.checksum.outputs.release_date }}"
-          IS_PRERELEASE="${{ steps.checksum.outputs.is_prerelease }}"
 
           # Create latest.json
           cat > latest.json <<EOF
@@ -359,7 +358,7 @@ jobs:
             "url": "https://dist.lacylights.com/releases/${COMPONENT}/$ARTIFACT",
             "sha256": "$SHA256",
             "releaseDate": "$RELEASE_DATE",
-            "isPrerelease": $IS_PRERELEASE,
+            "isPrerelease": false,
             "fileSize": $FILE_SIZE,
             "installScript": "https://dist.lacylights.com/releases/${COMPONENT}/install.sh"
           }
@@ -369,9 +368,47 @@ jobs:
           aws s3 cp latest.json \
             "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${COMPONENT}/latest.json" \
             --content-type "application/json" \
+            --cache-control "max-age=300, must-revalidate" \
             --metadata-directive REPLACE
 
           echo "✓ latest.json updated"
+
+      - name: Update prerelease.json
+        if: steps.checksum.outputs.is_prerelease == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          COMPONENT="rpi"
+          VERSION="${{ steps.version.outputs.version }}"
+          ARTIFACT="${{ steps.checksum.outputs.artifact }}"
+          SHA256="${{ steps.checksum.outputs.sha256 }}"
+          FILE_SIZE="${{ steps.checksum.outputs.file_size }}"
+          RELEASE_DATE="${{ steps.checksum.outputs.release_date }}"
+
+          # Create prerelease.json
+          cat > prerelease.json <<EOF
+          {
+            "version": "$VERSION",
+            "url": "https://dist.lacylights.com/releases/${COMPONENT}/$ARTIFACT",
+            "sha256": "$SHA256",
+            "releaseDate": "$RELEASE_DATE",
+            "isPrerelease": true,
+            "fileSize": $FILE_SIZE,
+            "installScript": "https://dist.lacylights.com/releases/${COMPONENT}/install.sh"
+          }
+          EOF
+
+          echo "Uploading prerelease.json..."
+          aws s3 cp prerelease.json \
+            "s3://${{ secrets.AWS_DIST_BUCKET }}/releases/${COMPONENT}/prerelease.json" \
+            --content-type "application/json" \
+            --cache-control "max-age=300, must-revalidate" \
+            --metadata-directive REPLACE
+
+          echo "✓ prerelease.json updated"
 
       - name: Update DynamoDB
         env:
