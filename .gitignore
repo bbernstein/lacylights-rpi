@@ -80,6 +80,8 @@ pip-delete-this-directory.txt
 *.sqlite
 *.sqlite3
 *.db-journal
+*.db-shm
+*.db-wal
 
 # SSH keys and certificates (security)
 *.key
