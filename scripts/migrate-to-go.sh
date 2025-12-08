@@ -164,7 +164,7 @@ detect_architecture() {
             print_success "Detected 64-bit ARM (Pi 4/5)"
             ;;
         armv7l|armhf)
-            BINARY_ARCH="armhf"
+            BINARY_ARCH="arm"  # GOARCH=arm for ARM32
             print_success "Detected 32-bit ARM (Pi 3)"
             ;;
         *)
@@ -239,9 +239,10 @@ download_go_binary() {
         rollback
     fi
 
-    # Construct binary-specific URL
-    BINARY_URL="$DIST_BASE_URL/lacylights-server-${VERSION}-${BINARY_ARCH}"
-    CHECKSUM_URL="$DIST_BASE_URL/lacylights-server-${VERSION}-${BINARY_ARCH}.sha256"
+    # Construct binary-specific URL with versioned directory structure
+    # Format: releases/go/v{VERSION}/lacylights-linux-{ARCH}
+    BINARY_URL="$DIST_BASE_URL/v${VERSION}/lacylights-linux-${BINARY_ARCH}"
+    CHECKSUM_URL="$DIST_BASE_URL/v${VERSION}/lacylights-linux-${BINARY_ARCH}.sha256"
 
     print_success "Latest version: $VERSION"
     print_info "Architecture: $BINARY_ARCH"
