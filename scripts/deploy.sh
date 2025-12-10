@@ -436,23 +436,26 @@ if [ "$DEPLOY_MCP" = true ]; then
     print_success "MCP code and build artifacts synced"
 fi
 
-# Deploy update scripts for version management
-print_header "Deploying Update Scripts"
+# Deploy update scripts for version management (only when deploying backend)
+# The update scripts are used by the backend service for version management
+if [ "$DEPLOY_BACKEND" = true ]; then
+    print_header "Deploying Update Scripts"
 
-print_info "Copying update scripts to Raspberry Pi..."
-ssh "$PI_HOST" "sudo mkdir -p /opt/lacylights/scripts && sudo chown lacylights:lacylights /opt/lacylights/scripts"
+    print_info "Copying update scripts to Raspberry Pi..."
+    ssh "$PI_HOST" "sudo mkdir -p /opt/lacylights/scripts && sudo chown lacylights:lacylights /opt/lacylights/scripts"
 
-# Copy update scripts
-rsync -avz \
-    --rsync-path="sudo rsync" \
-    "$LOCAL_DIR/scripts/update-repos.sh" \
-    "$LOCAL_DIR/scripts/update-repos-wrapper.sh" \
-    "$PI_HOST:/opt/lacylights/scripts/"
+    # Copy update scripts
+    rsync -avz \
+        --rsync-path="sudo rsync" \
+        "$LOCAL_DIR/scripts/update-repos.sh" \
+        "$LOCAL_DIR/scripts/update-repos-wrapper.sh" \
+        "$PI_HOST:/opt/lacylights/scripts/"
 
-# Set permissions
-ssh "$PI_HOST" "sudo chmod +x /opt/lacylights/scripts/update-repos.sh /opt/lacylights/scripts/update-repos-wrapper.sh && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
+    # Set permissions
+    ssh "$PI_HOST" "sudo chmod +x /opt/lacylights/scripts/update-repos.sh /opt/lacylights/scripts/update-repos-wrapper.sh && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
 
-print_success "Update scripts deployed"
+    print_success "Update scripts deployed"
+fi
 
 # Setup version management symlinks and files
 print_header "Setting Up Version Management"
@@ -506,26 +509,42 @@ get_local_version() {
     )
 }
 
-# Get versions from local repos
-GO_VERSION=$(get_local_version "$REPOS_DIR/lacylights-go")
-FE_VERSION=$(get_local_version "$REPOS_DIR/lacylights-fe")
-MCP_VERSION=$(get_local_version "$REPOS_DIR/lacylights-mcp")
+# Get versions only for repos that are being deployed
+GO_VERSION="unknown"
+FE_VERSION="unknown"
+MCP_VERSION="unknown"
+
+if [ "$DEPLOY_BACKEND" = true ]; then
+    GO_VERSION=$(get_local_version "$REPOS_DIR/lacylights-go")
+fi
+if [ "$DEPLOY_FRONTEND" = true ]; then
+    FE_VERSION=$(get_local_version "$REPOS_DIR/lacylights-fe")
+fi
+if [ "$DEPLOY_MCP" = true ]; then
+    MCP_VERSION=$(get_local_version "$REPOS_DIR/lacylights-mcp")
+fi
 
 print_info "Detected versions: backend=$GO_VERSION, frontend=$FE_VERSION, mcp=$MCP_VERSION"
 
-# Set version files on Pi
-# Pass versions as positional parameters to avoid command injection via malicious git tags
-ssh "$PI_HOST" bash -s -- "$GO_VERSION" "$FE_VERSION" "$MCP_VERSION" <<'ENDSSH'
+# Set version files on Pi only for deployed components
+# Pass versions and deployment flags as positional parameters to avoid command injection
+ssh "$PI_HOST" bash -s -- "$GO_VERSION" "$FE_VERSION" "$MCP_VERSION" "$DEPLOY_BACKEND" "$DEPLOY_FRONTEND" "$DEPLOY_MCP" <<'ENDSSH'
 set -e
 
-echo "[INFO] Setting backend version to $1"
-echo "$1" | sudo -u lacylights tee "/opt/lacylights/backend/.lacylights-version" > /dev/null
+if [ "$4" = true ]; then
+    echo "[INFO] Setting backend version to $1"
+    echo "$1" | sudo -u lacylights tee "/opt/lacylights/backend/.lacylights-version" > /dev/null
+fi
 
-echo "[INFO] Setting frontend-src version to $2"
-echo "$2" | sudo -u pi tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
+if [ "$5" = true ]; then
+    echo "[INFO] Setting frontend-src version to $2"
+    echo "$2" | sudo -u pi tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
+fi
 
-echo "[INFO] Setting mcp version to $3"
-echo "$3" | sudo -u pi tee "/opt/lacylights/mcp/.lacylights-version" > /dev/null
+if [ "$6" = true ]; then
+    echo "[INFO] Setting mcp version to $3"
+    echo "$3" | sudo -u pi tee "/opt/lacylights/mcp/.lacylights-version" > /dev/null
+fi
 
 echo "[SUCCESS] Version tracking files created"
 ENDSSH
@@ -622,45 +641,58 @@ else
     print_info "Skipping separate dependency installation (already installed during rebuild)"
 fi
 
-# Restart services
+# Restart services (only for deployed components)
 if [ "$SKIP_RESTART" = false ]; then
     print_header "Restarting Services"
 
-    print_info "Restarting LacyLights service..."
+    print_info "Restarting deployed services..."
 
-    ssh "$PI_HOST" << 'ENDSSH'
+    # Pass deployment flags to remote script to conditionally restart services
+    ssh "$PI_HOST" bash -s -- "$DEPLOY_BACKEND" "$DEPLOY_FRONTEND" << 'ENDSSH'
 set -e
 
-echo "[INFO] Restarting LacyLights backend service..."
-sudo systemctl restart lacylights
+RESTART_BACKEND="$1"
+RESTART_FRONTEND="$2"
 
-echo "[INFO] Restarting LacyLights frontend service..."
-if sudo systemctl is-enabled lacylights-frontend &>/dev/null; then
-    sudo systemctl restart lacylights-frontend
-    echo "[SUCCESS] Frontend service restarted"
-else
-    echo "[INFO] Frontend service not enabled, skipping"
+if [ "$RESTART_BACKEND" = true ]; then
+    echo "[INFO] Restarting LacyLights backend service..."
+    sudo systemctl restart lacylights
+    echo "[SUCCESS] Backend service restarted"
+fi
+
+if [ "$RESTART_FRONTEND" = true ]; then
+    echo "[INFO] Restarting LacyLights frontend service..."
+    if sudo systemctl is-enabled lacylights-frontend &>/dev/null; then
+        sudo systemctl restart lacylights-frontend
+        echo "[SUCCESS] Frontend service restarted"
+    else
+        echo "[INFO] Frontend service not enabled, skipping"
+    fi
 fi
 
 echo "[INFO] Waiting for services to start..."
 sleep 3
 
 echo "[INFO] Checking service status..."
-if sudo systemctl is-active --quiet lacylights; then
-    echo "[SUCCESS] LacyLights backend service is running"
-else
-    echo "[ERROR] LacyLights backend service failed to start"
-    sudo systemctl status lacylights --no-pager
-    exit 1
+if [ "$RESTART_BACKEND" = true ]; then
+    if sudo systemctl is-active --quiet lacylights; then
+        echo "[SUCCESS] LacyLights backend service is running"
+    else
+        echo "[ERROR] LacyLights backend service failed to start"
+        sudo systemctl status lacylights --no-pager
+        exit 1
+    fi
 fi
 
-if sudo systemctl is-enabled lacylights-frontend &>/dev/null; then
-    if sudo systemctl is-active --quiet lacylights-frontend; then
-        echo "[SUCCESS] LacyLights frontend service is running"
-    else
-        echo "[ERROR] LacyLights frontend service failed to start"
-        sudo systemctl status lacylights-frontend --no-pager
-        exit 1
+if [ "$RESTART_FRONTEND" = true ]; then
+    if sudo systemctl is-enabled lacylights-frontend &>/dev/null; then
+        if sudo systemctl is-active --quiet lacylights-frontend; then
+            echo "[SUCCESS] LacyLights frontend service is running"
+        else
+            echo "[ERROR] LacyLights frontend service failed to start"
+            sudo systemctl status lacylights-frontend --no-pager
+            exit 1
+        fi
     fi
 fi
 
