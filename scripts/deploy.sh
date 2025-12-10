@@ -340,8 +340,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
 
     # Sync backend to Pi (including built binary)
     # Note: Not using --delete flag to preserve database files and runtime-generated content
+    # Use --rsync-path with sudo because /opt/lacylights/backend is owned by lacylights user
     print_info "Syncing Go backend binary and configuration to Raspberry Pi..."
     rsync -avz \
+        --rsync-path="sudo rsync" \
         --exclude '.git' \
         --exclude '.DS_Store' \
         --exclude 'coverage' \
@@ -356,9 +358,14 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --exclude '*' \
         ./ "$PI_HOST:$BACKEND_REMOTE/"
 
-    # Ensure binary is executable
+    # Ensure binary is executable and owned by lacylights
     print_info "Setting binary permissions..."
-    ssh "$PI_HOST" "chmod +x $BACKEND_REMOTE/lacylights-server && sudo chown lacylights:lacylights $BACKEND_REMOTE/lacylights-server"
+    ssh "$PI_HOST" "sudo chmod +x $BACKEND_REMOTE/lacylights-server && sudo chown lacylights:lacylights $BACKEND_REMOTE/lacylights-server"
+
+    # Update systemd service file to use Go backend
+    print_info "Updating systemd service file..."
+    cat "$LOCAL_DIR/systemd/lacylights.service" | ssh "$PI_HOST" "sudo tee /etc/systemd/system/lacylights.service > /dev/null"
+    ssh "$PI_HOST" "sudo systemctl daemon-reload"
 
     print_success "Backend binary synced"
 fi
@@ -429,6 +436,24 @@ if [ "$DEPLOY_MCP" = true ]; then
     print_success "MCP code and build artifacts synced"
 fi
 
+# Deploy update scripts for version management
+print_header "Deploying Update Scripts"
+
+print_info "Copying update scripts to Raspberry Pi..."
+ssh "$PI_HOST" "sudo mkdir -p /opt/lacylights/scripts && sudo chown lacylights:lacylights /opt/lacylights/scripts"
+
+# Copy update scripts
+rsync -avz \
+    --rsync-path="sudo rsync" \
+    "$LOCAL_DIR/scripts/update-repos.sh" \
+    "$LOCAL_DIR/scripts/update-repos-wrapper.sh" \
+    "$PI_HOST:/opt/lacylights/scripts/"
+
+# Set permissions
+ssh "$PI_HOST" "sudo chmod +x /opt/lacylights/scripts/update-repos.sh /opt/lacylights/scripts/update-repos-wrapper.sh && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
+
+print_success "Update scripts deployed"
+
 # Setup version management symlinks and files
 print_header "Setting Up Version Management"
 
@@ -456,45 +481,47 @@ echo "[SUCCESS] Version management symlinks created"
 ENDSSH
 
 print_info "Creating version tracking files..."
-ssh "$PI_HOST" << 'ENDSSH'
-set -e
 
-# Function to get git version from a repository
-get_version() {
+# Get versions from local git repos (where we have access to git tags)
+get_local_version() {
     local repo_path=$1
-    cd "$repo_path"
-    # Try to get the most recent tag
-    version=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+    local version=""
 
-    # If no tags found, try to get from package.json
-    if [ -z "$version" ] && [ -f "package.json" ]; then
-        version=$(grep '"version"' package.json | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
-        if [ -n "$version" ]; then
+    if [ -d "$repo_path/.git" ]; then
+        cd "$repo_path"
+        version=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+    fi
+
+    # Fallback to package.json if no git tag
+    if [ -z "$version" ] && [ -f "$repo_path/package.json" ]; then
+        version=$(grep '"version"' "$repo_path/package.json" | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+        if [ -n "$version" ] && [[ ! "$version" =~ ^v ]]; then
             version="v$version"
         fi
     fi
 
-    # Default to unknown if still empty
-    if [ -z "$version" ]; then
-        version="unknown"
-    fi
-
-    echo "$version"
+    echo "${version:-unknown}"
 }
 
-# Create version files for each repository with appropriate ownership
-# backend is owned by lacylights, frontend-src and mcp are owned by pi
-for repo in backend frontend-src mcp; do
-    version=$(get_version "/opt/lacylights/$repo")
-    echo "[INFO] Setting $repo version to $version"
+# Get versions from local repos
+GO_VERSION=$(get_local_version "$REPOS_DIR/lacylights-go")
+FE_VERSION=$(get_local_version "$REPOS_DIR/lacylights-fe")
+MCP_VERSION=$(get_local_version "$REPOS_DIR/lacylights-mcp")
 
-    # Use appropriate user based on directory ownership
-    if [ "$repo" = "backend" ]; then
-        echo "$version" | sudo -u lacylights tee "/opt/lacylights/$repo/.lacylights-version" > /dev/null
-    else
-        echo "$version" | sudo -u pi tee "/opt/lacylights/$repo/.lacylights-version" > /dev/null
-    fi
-done
+print_info "Detected versions: backend=$GO_VERSION, frontend=$FE_VERSION, mcp=$MCP_VERSION"
+
+# Set version files on Pi
+ssh "$PI_HOST" << ENDSSH
+set -e
+
+echo "[INFO] Setting backend version to $GO_VERSION"
+echo "$GO_VERSION" | sudo -u lacylights tee "/opt/lacylights/backend/.lacylights-version" > /dev/null
+
+echo "[INFO] Setting frontend-src version to $FE_VERSION"
+echo "$FE_VERSION" | sudo -u pi tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
+
+echo "[INFO] Setting mcp version to $MCP_VERSION"
+echo "$MCP_VERSION" | sudo -u pi tee "/opt/lacylights/mcp/.lacylights-version" > /dev/null
 
 echo "[SUCCESS] Version tracking files created"
 ENDSSH
@@ -600,19 +627,37 @@ if [ "$SKIP_RESTART" = false ]; then
     ssh "$PI_HOST" << 'ENDSSH'
 set -e
 
-echo "[INFO] Restarting LacyLights service..."
+echo "[INFO] Restarting LacyLights backend service..."
 sudo systemctl restart lacylights
 
-echo "[INFO] Waiting for service to start..."
+echo "[INFO] Restarting LacyLights frontend service..."
+if sudo systemctl is-enabled lacylights-frontend &>/dev/null; then
+    sudo systemctl restart lacylights-frontend
+    echo "[SUCCESS] Frontend service restarted"
+else
+    echo "[INFO] Frontend service not enabled, skipping"
+fi
+
+echo "[INFO] Waiting for services to start..."
 sleep 3
 
 echo "[INFO] Checking service status..."
 if sudo systemctl is-active --quiet lacylights; then
-    echo "[SUCCESS] LacyLights service is running"
+    echo "[SUCCESS] LacyLights backend service is running"
 else
-    echo "[ERROR] LacyLights service failed to start"
+    echo "[ERROR] LacyLights backend service failed to start"
     sudo systemctl status lacylights --no-pager
     exit 1
+fi
+
+if sudo systemctl is-enabled lacylights-frontend &>/dev/null; then
+    if sudo systemctl is-active --quiet lacylights-frontend; then
+        echo "[SUCCESS] LacyLights frontend service is running"
+    else
+        echo "[ERROR] LacyLights frontend service failed to start"
+        sudo systemctl status lacylights-frontend --no-pager
+        exit 1
+    fi
 fi
 
 ENDSSH
