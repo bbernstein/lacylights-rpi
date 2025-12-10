@@ -483,24 +483,27 @@ ENDSSH
 print_info "Creating version tracking files..."
 
 # Get versions from local git repos (where we have access to git tags)
+# Uses subshell to isolate directory changes
 get_local_version() {
     local repo_path=$1
-    local version=""
+    (
+        local version=""
 
-    if [ -d "$repo_path/.git" ]; then
-        cd "$repo_path"
-        version=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-    fi
-
-    # Fallback to package.json if no git tag
-    if [ -z "$version" ] && [ -f "$repo_path/package.json" ]; then
-        version=$(grep '"version"' "$repo_path/package.json" | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
-        if [ -n "$version" ] && [[ ! "$version" =~ ^v ]]; then
-            version="v$version"
+        if [ -d "$repo_path/.git" ]; then
+            cd "$repo_path"
+            version=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
         fi
-    fi
 
-    echo "${version:-unknown}"
+        # Fallback to package.json if no git tag
+        if [ -z "$version" ] && [ -f "$repo_path/package.json" ]; then
+            version=$(grep '"version"' "$repo_path/package.json" | head -1 | sed 's/.*"version": "\(.*\)".*/\1/')
+            if [ -n "$version" ] && [[ ! "$version" =~ ^v ]]; then
+                version="v$version"
+            fi
+        fi
+
+        echo "${version:-unknown}"
+    )
 }
 
 # Get versions from local repos
