@@ -177,7 +177,7 @@ jobs:
           echo "Version tag: $VERSION_TAG"
 
           # Push the version commit if there are commits to push
-          if git diff --quiet origin/"$CURRENT_BRANCH" HEAD 2>/dev/null; then
+          if [ -z "$(git rev-list origin/"$CURRENT_BRANCH"..HEAD 2>/dev/null)" ]; then
             echo "No new commits to push"
           else
             git push origin "$CURRENT_BRANCH"
