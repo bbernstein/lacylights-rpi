@@ -514,17 +514,18 @@ MCP_VERSION=$(get_local_version "$REPOS_DIR/lacylights-mcp")
 print_info "Detected versions: backend=$GO_VERSION, frontend=$FE_VERSION, mcp=$MCP_VERSION"
 
 # Set version files on Pi
-ssh "$PI_HOST" << ENDSSH
+# Pass versions as positional parameters to avoid command injection via malicious git tags
+ssh "$PI_HOST" bash -s -- "$GO_VERSION" "$FE_VERSION" "$MCP_VERSION" <<'ENDSSH'
 set -e
 
-echo "[INFO] Setting backend version to $GO_VERSION"
-echo "$GO_VERSION" | sudo -u lacylights tee "/opt/lacylights/backend/.lacylights-version" > /dev/null
+echo "[INFO] Setting backend version to $1"
+echo "$1" | sudo -u lacylights tee "/opt/lacylights/backend/.lacylights-version" > /dev/null
 
-echo "[INFO] Setting frontend-src version to $FE_VERSION"
-echo "$FE_VERSION" | sudo -u pi tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
+echo "[INFO] Setting frontend-src version to $2"
+echo "$2" | sudo -u pi tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
 
-echo "[INFO] Setting mcp version to $MCP_VERSION"
-echo "$MCP_VERSION" | sudo -u pi tee "/opt/lacylights/mcp/.lacylights-version" > /dev/null
+echo "[INFO] Setting mcp version to $3"
+echo "$3" | sudo -u pi tee "/opt/lacylights/mcp/.lacylights-version" > /dev/null
 
 echo "[SUCCESS] Version tracking files created"
 ENDSSH
