@@ -160,7 +160,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add VERSION
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          # Only commit if VERSION file actually changed
+          if git diff --cached --quiet; then
+            echo "VERSION file unchanged, skipping commit"
+          else
+            git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          fi
 
       - name: Push version update and create tag
         run: |
@@ -171,8 +176,12 @@ jobs:
           echo "Current branch: $CURRENT_BRANCH"
           echo "Version tag: $VERSION_TAG"
 
-          # Push the version commit first
-          git push origin "$CURRENT_BRANCH"
+          # Push the version commit if there are commits to push
+          if [ -z "$(git rev-list origin/"$CURRENT_BRANCH"..HEAD 2>/dev/null)" ]; then
+            echo "No new commits to push"
+          else
+            git push origin "$CURRENT_BRANCH"
+          fi
 
           # Check if tag exists on remote (skip if exists - idempotent)
           if git ls-remote --tags origin "refs/tags/$VERSION_TAG" | grep -q "$VERSION_TAG"; then
