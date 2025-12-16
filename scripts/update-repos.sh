@@ -752,12 +752,23 @@ except Exception as e:
                 fi
             else
                 print_warning "Backend directory $backend_dir not found, creating it..."
-                mkdir -p "$backend_dir"
+                if ! mkdir -p "$backend_dir"; then
+                    print_error "Failed to create backend directory"
+                    popd >/dev/null
+                    restore_from_backup "$backup_file" "$repo_name"
+                    return 1
+                fi
                 sudo chown lacylights:lacylights "$backend_dir"
-                cp lacylights-server "$backend_dir/lacylights-server"
-                chmod +x "$backend_dir/lacylights-server"
-                sudo chown lacylights:lacylights "$backend_dir/lacylights-server"
-                print_success "Go backend binary deployed to $backend_dir"
+                if cp lacylights-server "$backend_dir/lacylights-server"; then
+                    chmod +x "$backend_dir/lacylights-server"
+                    sudo chown lacylights:lacylights "$backend_dir/lacylights-server"
+                    print_success "Go backend binary deployed to $backend_dir"
+                else
+                    print_error "Failed to copy binary to backend directory"
+                    popd >/dev/null
+                    restore_from_backup "$backup_file" "$repo_name"
+                    return 1
+                fi
             fi
         else
             print_error "Go backend binary not found in archive"
