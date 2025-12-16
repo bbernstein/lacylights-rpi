@@ -342,7 +342,9 @@ get_all_versions() {
     local output_format="${1:-text}"
 
     local fe_installed=$(get_installed_version "$REPOS_DIR/lacylights-fe")
-    local go_installed=$(get_installed_version "$REPOS_DIR/lacylights-go")
+    # Go backend version is read from backend directory (where it actually runs)
+    # This ensures version is accurate whether deployed via deploy.sh or update-repos.sh
+    local go_installed=$(get_installed_version "$LACYLIGHTS_ROOT/backend")
     local mcp_installed=$(get_installed_version "$REPOS_DIR/lacylights-mcp")
 
     local fe_latest=$(get_latest_release_version "lacylights-fe")
@@ -411,7 +413,12 @@ update_repo() {
     fi
 
     # Check if already at target version
-    local current_version=$(get_installed_version "$repo_dir")
+    # For Go backend, check version from backend directory (where it actually runs)
+    local version_check_dir="$repo_dir"
+    if [ "$repo_name" = "lacylights-go" ]; then
+        version_check_dir="$LACYLIGHTS_ROOT/backend"
+    fi
+    local current_version=$(get_installed_version "$version_check_dir")
     if [ "$current_version" = "$version_to_install" ]; then
         print_success "$repo_name is already at $version_to_install"
         return 0
@@ -716,7 +723,12 @@ except Exception as e:
     fi
 
     # Write version file
-    echo "$version_to_install" > "$repo_dir/.lacylights-version"
+    # For Go backend, write to backend directory (where it actually runs)
+    if [ "$repo_name" = "lacylights-go" ]; then
+        echo "$version_to_install" > "$LACYLIGHTS_ROOT/backend/.lacylights-version"
+    else
+        echo "$version_to_install" > "$repo_dir/.lacylights-version"
+    fi
 
     # Clean up
     rm -rf "$temp_dir" "$temp_backup"
