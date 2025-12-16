@@ -720,13 +720,38 @@ except Exception as e:
         # Frontend uses pre-built static export - no npm install or build needed
         print_success "Using pre-built static export for $repo_name (no build required)"
     elif [ "$repo_name" = "lacylights-go" ]; then
-        # Go backend is a pre-built binary - just ensure it's executable
+        # Go backend is a pre-built binary - set up and deploy to backend directory
         print_status "Setting up Go backend binary..."
         pushd "$repo_dir" >/dev/null
         if [ -f "lacylights-server" ]; then
             chmod +x lacylights-server
             sudo chown lacylights:lacylights lacylights-server
-            print_success "Go backend binary ready"
+            print_success "Go backend binary ready in repos directory"
+
+            # Deploy binary to the backend directory where the systemd service runs
+            local backend_dir="$LACYLIGHTS_ROOT/backend"
+            if [ -d "$backend_dir" ]; then
+                print_status "Deploying binary to backend directory..."
+                # Copy the binary to the backend directory
+                if cp lacylights-server "$backend_dir/lacylights-server"; then
+                    chmod +x "$backend_dir/lacylights-server"
+                    sudo chown lacylights:lacylights "$backend_dir/lacylights-server"
+                    print_success "Go backend binary deployed to $backend_dir"
+                else
+                    print_error "Failed to copy binary to backend directory"
+                    popd >/dev/null
+                    restore_from_backup "$backup_file" "$repo_name"
+                    return 1
+                fi
+            else
+                print_warning "Backend directory $backend_dir not found, creating it..."
+                mkdir -p "$backend_dir"
+                sudo chown lacylights:lacylights "$backend_dir"
+                cp lacylights-server "$backend_dir/lacylights-server"
+                chmod +x "$backend_dir/lacylights-server"
+                sudo chown lacylights:lacylights "$backend_dir/lacylights-server"
+                print_success "Go backend binary deployed to $backend_dir"
+            fi
         else
             print_error "Go backend binary not found in archive"
             print_status "Attempting to restore from backup..."
