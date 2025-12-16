@@ -252,22 +252,24 @@ if [ "$SKIP_LOCAL_BUILD" = false ]; then
         esac
         print_info "Detected Pi architecture: $PI_ARCH, using GOARCH=$GOARCH"
 
-        # Check if we have a Makefile or just compile directly
-        if [ -f "Makefile" ]; then
-            print_info "Building Go backend with make..."
-            if grep -q "build-$GOARCH" Makefile; then
-                make "build-$GOARCH"
-            else
-                print_info "No architecture-specific make target found, building with GOARCH=$GOARCH"
-                GOOS=linux GOARCH=$GOARCH go build -o lacylights-server ./cmd/server
-            fi
-        elif [ -f "go.mod" ]; then
-            print_info "Building Go backend..."
-            GOOS=linux GOARCH=$GOARCH go build -o lacylights-server ./cmd/server
-        else
-            print_error "No Makefile or go.mod found in Go backend repository"
+        # Get version information for ldflags
+        BUILD_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "dev")
+        BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        BUILD_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        print_info "Building version: $BUILD_VERSION (commit: $BUILD_COMMIT)"
+
+        # Verify this is a Go project
+        if [ ! -f "go.mod" ]; then
+            print_error "No go.mod found in Go backend repository"
             exit 1
         fi
+
+        # Build with ldflags to embed version info
+        # We use direct go build instead of make to ensure ldflags are passed correctly
+        # The Makefile's build target doesn't support custom LDFLAGS
+        LDFLAGS="-X main.Version=$BUILD_VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$BUILD_COMMIT"
+        print_info "Building Go backend with GOARCH=$GOARCH..."
+        GOOS=linux GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o lacylights-server ./cmd/server
 
         if [ $? -eq 0 ]; then
             print_success "Backend built successfully"
@@ -358,9 +360,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --exclude '*' \
         ./ "$PI_HOST:$BACKEND_REMOTE/"
 
-    # Ensure binary is executable and owned by lacylights
-    print_info "Setting binary permissions..."
-    ssh "$PI_HOST" "sudo chmod +x $BACKEND_REMOTE/lacylights-server && sudo chown lacylights:lacylights $BACKEND_REMOTE/lacylights-server"
+    # Ensure backend directory and binary are owned by lacylights
+    # This is necessary because rsync preserves Mac ownership
+    print_info "Setting backend permissions..."
+    ssh "$PI_HOST" "sudo chown -R lacylights:lacylights $BACKEND_REMOTE && sudo chmod +x $BACKEND_REMOTE/lacylights-server"
 
     # Update systemd service file to use Go backend
     print_info "Updating systemd service file..."
@@ -457,30 +460,30 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     print_success "Update scripts deployed"
 fi
 
-# Setup version management symlinks and files
+# Setup version management directories
 print_header "Setting Up Version Management"
 
-print_info "Creating symlinks for version management..."
+print_info "Cleaning up directory structure for version management..."
 ssh "$PI_HOST" << 'ENDSSH'
 set -e
 
-# Create symlinks in /opt/lacylights/repos/
-if [ ! -L /opt/lacylights/repos/lacylights-go ]; then
-    echo "[INFO] Creating symlink: lacylights-go -> backend"
-    sudo ln -sf /opt/lacylights/backend /opt/lacylights/repos/lacylights-go
-fi
+# Remove any stale symlinks in /opt/lacylights/repos/ that point elsewhere
+# These cause conflicts with the update system which expects real directories
+for repo in lacylights-go lacylights-fe lacylights-mcp; do
+    if [ -L "/opt/lacylights/repos/$repo" ]; then
+        echo "[INFO] Removing stale symlink: /opt/lacylights/repos/$repo"
+        sudo rm -f "/opt/lacylights/repos/$repo"
+    fi
+done
 
-if [ ! -L /opt/lacylights/repos/lacylights-fe ]; then
-    echo "[INFO] Creating symlink: lacylights-fe -> frontend-src"
-    sudo ln -sf /opt/lacylights/frontend-src /opt/lacylights/repos/lacylights-fe
-fi
+# Ensure repos directory and subdirectories exist (used by update-repos.sh)
+# The update system needs these directories for downloading updates and creating backups
+sudo mkdir -p /opt/lacylights/repos/lacylights-go
+sudo mkdir -p /opt/lacylights/repos/lacylights-fe
+sudo mkdir -p /opt/lacylights/repos/lacylights-mcp
+sudo chown -R lacylights:lacylights /opt/lacylights/repos
 
-if [ ! -L /opt/lacylights/repos/lacylights-mcp ]; then
-    echo "[INFO] Creating symlink: lacylights-mcp -> mcp"
-    sudo ln -sf /opt/lacylights/mcp /opt/lacylights/repos/lacylights-mcp
-fi
-
-echo "[SUCCESS] Version management symlinks created"
+echo "[SUCCESS] Version management directories ready"
 ENDSSH
 
 print_info "Creating version tracking files..."
