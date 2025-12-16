@@ -62,6 +62,31 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to detect current platform (OS and architecture)
+# Returns: os:arch (e.g., "linux:arm64", "darwin:amd64")
+get_current_platform() {
+    local os arch
+
+    # Detect OS
+    case "$(uname -s)" in
+        Darwin) os="darwin" ;;
+        Linux) os="linux" ;;
+        *) os="unknown" ;;
+    esac
+
+    # Detect architecture
+    case "$(uname -m)" in
+        x86_64) arch="amd64" ;;
+        amd64) arch="amd64" ;;
+        aarch64) arch="arm64" ;;
+        arm64) arch="arm64" ;;
+        armv7l|armv6l|arm) arch="arm" ;;
+        *) arch="unknown" ;;
+    esac
+
+    echo "${os}:${arch}"
+}
+
 # Function to fix npm cache permissions
 # This fixes issues where npm cache was created by root user
 fix_npm_permissions() {
@@ -452,19 +477,59 @@ update_repo() {
         return 1
     fi
 
-    # Extract download URL and SHA256 from metadata
+    # Detect current platform for selecting the correct download URL
+    local platform=$(get_current_platform)
+    local platform_os="${platform%%:*}"
+    local platform_arch="${platform##*:}"
+
+    if [ "$platform_os" = "unknown" ] || [ "$platform_arch" = "unknown" ]; then
+        print_error "Could not detect platform (os=$platform_os, arch=$platform_arch)"
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
+    fi
+
+    print_status "Detected platform: $platform_os/$platform_arch"
+
+    # Extract download URL and SHA256 from metadata for current platform
     local download_url
     local expected_sha256
+
     if command_exists jq; then
-        download_url=$(jq -r '.url // empty' "$metadata_file")
-        expected_sha256=$(jq -r '.sha256 // empty' "$metadata_file")
+        # Use jq to select the correct platform from the platforms array
+        download_url=$(jq -r --arg os "$platform_os" --arg arch "$platform_arch" '
+            .platforms[] | select(.os == $os and .arch == $arch) | .url // empty
+        ' "$metadata_file" | head -1)
+        expected_sha256=$(jq -r --arg os "$platform_os" --arg arch "$platform_arch" '
+            .platforms[] | select(.os == $os and .arch == $arch) | .sha256 // empty
+        ' "$metadata_file" | head -1)
+    elif command_exists python3; then
+        # Fallback to Python if jq is not available
+        download_url=$(python3 -c "
+import json, sys
+with open('$metadata_file') as f:
+    d = json.load(f)
+p = [x for x in d.get('platforms', []) if x.get('os') == '$platform_os' and x.get('arch') == '$platform_arch']
+print(p[0].get('url', '') if p else '')
+" 2>/dev/null)
+        expected_sha256=$(python3 -c "
+import json, sys
+with open('$metadata_file') as f:
+    d = json.load(f)
+p = [x for x in d.get('platforms', []) if x.get('os') == '$platform_os' and x.get('arch') == '$platform_arch']
+print(p[0].get('sha256', '') if p else '')
+" 2>/dev/null)
     else
-        download_url=$(grep -o '"url"[[:space:]]*:[[:space:]]*"[^"]*"' "$metadata_file" | sed 's/.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-        expected_sha256=$(grep -o '"sha256"[[:space:]]*:[[:space:]]*"[^"]*"' "$metadata_file" | sed 's/.*"sha256"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        print_error "Neither jq nor python3 available for JSON parsing"
+        rm -rf "$temp_dir" "$temp_backup"
+        return 1
     fi
 
     if [ -z "$download_url" ]; then
-        print_error "Could not extract download URL from metadata"
+        print_error "Could not find download URL for platform $platform_os/$platform_arch"
+        print_error "Available platforms in metadata:"
+        if command_exists jq; then
+            jq -r '.platforms[] | "  - \(.os)/\(.arch)"' "$metadata_file" >&2
+        fi
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     fi
