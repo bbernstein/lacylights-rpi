@@ -302,7 +302,8 @@ restore_from_backup() {
     if [ "$repo_name" = "lacylights-go" ]; then
         if [ -f "lacylights-server" ]; then
             chmod +x lacylights-server
-            sudo chown lacylights:lacylights lacylights-server
+            # Use full path for sudoers compatibility
+            sudo chown lacylights:lacylights "$repo_dir/lacylights-server"
         fi
     elif [ -f "package.json" ]; then
         # Fix npm cache permissions before running npm commands
@@ -732,7 +733,8 @@ except Exception as e:
         pushd "$repo_dir" >/dev/null
         if [ -f "lacylights-server" ]; then
             chmod +x lacylights-server
-            sudo chown lacylights:lacylights lacylights-server
+            # Use full path for sudoers compatibility
+            sudo chown lacylights:lacylights "$repo_dir/lacylights-server"
             print_success "Go backend binary ready in repos directory"
 
             # Deploy binary to the backend directory where the systemd service runs

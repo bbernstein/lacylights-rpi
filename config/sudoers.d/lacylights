@@ -63,5 +63,8 @@ lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active --quiet lacylights-frontend
 
-# Allow chown for setting file ownership during updates (restricted to LacyLights directory)
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/*
+# Allow chown for setting file ownership during updates
+# Specific paths for Go backend binary and backend directory
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/repos/lacylights-go/lacylights-server
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/backend/lacylights-server
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/backend
