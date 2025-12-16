@@ -338,14 +338,15 @@ restore_from_backup() {
 }
 
 # Function to get version information for all repos
+# Versions are read from deployment directories (where services actually run)
+# This ensures version is accurate whether deployed via deploy.sh or update-repos.sh
 get_all_versions() {
     local output_format="${1:-text}"
 
-    local fe_installed=$(get_installed_version "$REPOS_DIR/lacylights-fe")
-    # Go backend version is read from backend directory (where it actually runs)
-    # This ensures version is accurate whether deployed via deploy.sh or update-repos.sh
+    # Read versions from actual deployment directories, not repos/
+    local fe_installed=$(get_installed_version "$LACYLIGHTS_ROOT/frontend-src")
     local go_installed=$(get_installed_version "$LACYLIGHTS_ROOT/backend")
-    local mcp_installed=$(get_installed_version "$REPOS_DIR/lacylights-mcp")
+    local mcp_installed=$(get_installed_version "$LACYLIGHTS_ROOT/mcp")
 
     local fe_latest=$(get_latest_release_version "lacylights-fe")
     local go_latest=$(get_latest_release_version "lacylights-go")
@@ -413,11 +414,14 @@ update_repo() {
     fi
 
     # Check if already at target version
-    # For Go backend, check version from backend directory (where it actually runs)
-    local version_check_dir="$repo_dir"
-    if [ "$repo_name" = "lacylights-go" ]; then
-        version_check_dir="$LACYLIGHTS_ROOT/backend"
-    fi
+    # Read version from deployment directories (where services actually run)
+    local version_check_dir
+    case "$repo_name" in
+        "lacylights-go") version_check_dir="$LACYLIGHTS_ROOT/backend" ;;
+        "lacylights-fe") version_check_dir="$LACYLIGHTS_ROOT/frontend-src" ;;
+        "lacylights-mcp") version_check_dir="$LACYLIGHTS_ROOT/mcp" ;;
+        *) version_check_dir="$repo_dir" ;;
+    esac
     local current_version=$(get_installed_version "$version_check_dir")
     if [ "$current_version" = "$version_to_install" ]; then
         print_success "$repo_name is already at $version_to_install"
@@ -722,13 +726,15 @@ except Exception as e:
         fi
     fi
 
-    # Write version file
-    # For Go backend, write to backend directory (where it actually runs)
-    if [ "$repo_name" = "lacylights-go" ]; then
-        echo "$version_to_install" > "$LACYLIGHTS_ROOT/backend/.lacylights-version"
-    else
-        echo "$version_to_install" > "$repo_dir/.lacylights-version"
-    fi
+    # Write version file to deployment directory (where services actually run)
+    local version_file_dir
+    case "$repo_name" in
+        "lacylights-go") version_file_dir="$LACYLIGHTS_ROOT/backend" ;;
+        "lacylights-fe") version_file_dir="$LACYLIGHTS_ROOT/frontend-src" ;;
+        "lacylights-mcp") version_file_dir="$LACYLIGHTS_ROOT/mcp" ;;
+        *) version_file_dir="$repo_dir" ;;
+    esac
+    echo "$version_to_install" > "$version_file_dir/.lacylights-version"
 
     # Clean up
     rm -rf "$temp_dir" "$temp_backup"

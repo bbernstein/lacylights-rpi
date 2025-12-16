@@ -258,27 +258,18 @@ if [ "$SKIP_LOCAL_BUILD" = false ]; then
         BUILD_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
         print_info "Building version: $BUILD_VERSION (commit: $BUILD_COMMIT)"
 
-        # Build ldflags to embed version info
-        LDFLAGS="-X main.Version=$BUILD_VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$BUILD_COMMIT"
-
-        # Check if we have a Makefile or just compile directly
-        if [ -f "Makefile" ]; then
-            print_info "Building Go backend with make..."
-            if grep -q "build-$GOARCH" Makefile; then
-                # Note: make target may not support ldflags, so we build directly
-                print_info "Using direct go build for version embedding..."
-                GOOS=linux GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o lacylights-server ./cmd/server
-            else
-                print_info "No architecture-specific make target found, building with GOARCH=$GOARCH"
-                GOOS=linux GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o lacylights-server ./cmd/server
-            fi
-        elif [ -f "go.mod" ]; then
-            print_info "Building Go backend..."
-            GOOS=linux GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o lacylights-server ./cmd/server
-        else
-            print_error "No Makefile or go.mod found in Go backend repository"
+        # Verify this is a Go project
+        if [ ! -f "go.mod" ]; then
+            print_error "No go.mod found in Go backend repository"
             exit 1
         fi
+
+        # Build with ldflags to embed version info
+        # We use direct go build instead of make to ensure ldflags are passed correctly
+        # The Makefile's build target doesn't support custom LDFLAGS
+        LDFLAGS="-X main.Version=$BUILD_VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$BUILD_COMMIT"
+        print_info "Building Go backend with GOARCH=$GOARCH..."
+        GOOS=linux GOARCH=$GOARCH go build -ldflags "$LDFLAGS" -o lacylights-server ./cmd/server
 
         if [ $? -eq 0 ]; then
             print_success "Backend built successfully"
@@ -477,24 +468,19 @@ set -e
 
 # Remove any stale symlinks in /opt/lacylights/repos/ that point elsewhere
 # These cause conflicts with the update system which expects real directories
-if [ -L /opt/lacylights/repos/lacylights-go ]; then
-    echo "[INFO] Removing stale symlink: /opt/lacylights/repos/lacylights-go"
-    sudo rm -f /opt/lacylights/repos/lacylights-go
-fi
+for repo in lacylights-go lacylights-fe lacylights-mcp; do
+    if [ -L "/opt/lacylights/repos/$repo" ]; then
+        echo "[INFO] Removing stale symlink: /opt/lacylights/repos/$repo"
+        sudo rm -f "/opt/lacylights/repos/$repo"
+    fi
+done
 
-if [ -L /opt/lacylights/repos/lacylights-fe ]; then
-    echo "[INFO] Removing stale symlink: /opt/lacylights/repos/lacylights-fe"
-    sudo rm -f /opt/lacylights/repos/lacylights-fe
-fi
-
-if [ -L /opt/lacylights/repos/lacylights-mcp ]; then
-    echo "[INFO] Removing stale symlink: /opt/lacylights/repos/lacylights-mcp"
-    sudo rm -f /opt/lacylights/repos/lacylights-mcp
-fi
-
-# Ensure repos directory exists (used by update-repos.sh)
-sudo mkdir -p /opt/lacylights/repos
-sudo chown lacylights:lacylights /opt/lacylights/repos
+# Ensure repos directory and subdirectories exist (used by update-repos.sh)
+# The update system needs these directories for downloading updates and creating backups
+sudo mkdir -p /opt/lacylights/repos/lacylights-go
+sudo mkdir -p /opt/lacylights/repos/lacylights-fe
+sudo mkdir -p /opt/lacylights/repos/lacylights-mcp
+sudo chown -R lacylights:lacylights /opt/lacylights/repos
 
 echo "[SUCCESS] Version management directories ready"
 ENDSSH
