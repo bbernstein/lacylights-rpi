@@ -607,16 +607,31 @@ except Exception as e:
         return 1
     fi
 
-    # All distribution server archives use the same structure with one top-level directory
-    local strip_components=1
-
     # Extract to temporary location
     print_status "Extracting $repo_name..."
     mkdir -p "$temp_dir/extract"
-    if ! tar -xzf "$archive_file" -C "$temp_dir/extract" --strip-components=$strip_components; then
-        print_error "Failed to extract archive"
-        rm -rf "$temp_dir" "$temp_backup"
-        return 1
+
+    # Go archives contain just the binary (no directory structure)
+    # Other archives have a top-level directory that needs stripping
+    if [ "$repo_name" = "lacylights-go" ]; then
+        # Go archive: extract flat, then rename binary to expected name
+        if ! tar -xzf "$archive_file" -C "$temp_dir/extract"; then
+            print_error "Failed to extract archive"
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        fi
+        # Rename platform-specific binary to lacylights-server
+        local extracted_binary=$(find "$temp_dir/extract" -maxdepth 1 -name "lacylights-*" -type f | head -1)
+        if [ -n "$extracted_binary" ] && [ -f "$extracted_binary" ]; then
+            mv "$extracted_binary" "$temp_dir/extract/lacylights-server"
+        fi
+    else
+        # Other archives: strip top-level directory
+        if ! tar -xzf "$archive_file" -C "$temp_dir/extract" --strip-components=1; then
+            print_error "Failed to extract archive"
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        fi
     fi
 
     # Create permanent backup before any destructive operations
