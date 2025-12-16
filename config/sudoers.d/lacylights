@@ -1,7 +1,10 @@
-# LacyLights WiFi Management Permissions
+# LacyLights Service Permissions
 #
-# This file grants the lacylights user permission to execute NetworkManager (nmcli)
-# commands for WiFi configuration without requiring a password.
+# This file grants the lacylights user permission to execute specific commands
+# without requiring a password for:
+# - WiFi configuration via NetworkManager (nmcli)
+# - Service management for updates (systemctl)
+# - Repository updates and filesystem remounting
 #
 # IMPORTANT: This file must be installed to /etc/sudoers.d/lacylights with:
 #   sudo cp lacylights /etc/sudoers.d/
@@ -14,10 +17,11 @@
 # - Disconnect from WiFi networks
 # - Enable/disable the WiFi radio
 # - Manage saved network connections
+# - Update LacyLights components (stop/start services)
 #
-# Security Note: These commands only affect WiFi configuration and do not
-# grant broader system access. The lacylights service runs as a dedicated
-# user with limited privileges.
+# Security Note: These commands are limited to specific LacyLights services
+# and do not grant broader system access. The lacylights service runs as a
+# dedicated user with limited privileges.
 
 # Allow WiFi device management
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/nmcli device wifi *
@@ -46,3 +50,18 @@ lacylights ALL=(ALL) NOPASSWD: /opt/lacylights/scripts/update-repos-wrapper.sh *
 # Allow filesystem remounting for updates (used by wrapper script)
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/mount -o remount\,rw /
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/mount -o remount\,ro /
+
+# Allow service management for updates (stop/start/restart LacyLights services)
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active --quiet lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights-frontend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights-frontend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart lacylights-frontend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights-frontend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active --quiet lacylights-frontend
+
+# Allow chown for setting file ownership during updates
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights *
