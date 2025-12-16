@@ -496,28 +496,56 @@ update_repo() {
 
     if command_exists jq; then
         # Use jq to select the correct platform from the platforms array
-        download_url=$(jq -r --arg os "$platform_os" --arg arch "$platform_arch" '
-            .platforms[] | select(.os == $os and .arch == $arch) | .url // empty
-        ' "$metadata_file" | head -1)
-        expected_sha256=$(jq -r --arg os "$platform_os" --arg arch "$platform_arch" '
-            .platforms[] | select(.os == $os and .arch == $arch) | .sha256 // empty
-        ' "$metadata_file" | head -1)
+        # First, check how many matches we have to detect data quality issues
+        local matches
+        matches=$(jq -c --arg os "$platform_os" --arg arch "$platform_arch" '
+            [ .platforms[] | select(.os == $os and .arch == $arch) ]
+        ' "$metadata_file")
+        local match_count
+        match_count=$(echo "$matches" | jq 'length')
+
+        if [ "$match_count" -eq 0 ]; then
+            print_error "No matching platform entry found in metadata for $platform_os/$platform_arch"
+            print_error "Available platforms:"
+            jq -r '.platforms[] | "  - \(.os)/\(.arch)"' "$metadata_file" >&2
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        elif [ "$match_count" -gt 1 ]; then
+            print_error "Multiple matching platform entries ($match_count) found in metadata for $platform_os/$platform_arch"
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        fi
+
+        download_url=$(echo "$matches" | jq -r '.[0].url // empty')
+        expected_sha256=$(echo "$matches" | jq -r '.[0].sha256 // empty')
     elif command_exists python3; then
         # Fallback to Python if jq is not available
-        download_url=$(python3 -c "
+        # Single invocation to get both URL and SHA256 with proper error handling
+        local python_result
+        python_result=$(python3 -c "
 import json, sys
-with open('$metadata_file') as f:
-    d = json.load(f)
-p = [x for x in d.get('platforms', []) if x.get('os') == '$platform_os' and x.get('arch') == '$platform_arch']
-print(p[0].get('url', '') if p else '')
+try:
+    with open('$metadata_file') as f:
+        d = json.load(f)
+    p = [x for x in d.get('platforms', []) if x.get('os') == '$platform_os' and x.get('arch') == '$platform_arch']
+    if len(p) == 0:
+        print('ERROR:No matching platform entry found')
+    elif len(p) > 1:
+        print('ERROR:Multiple matching platform entries found')
+    else:
+        print(p[0].get('url', '') + '|' + p[0].get('sha256', ''))
+except Exception as e:
+    print('ERROR:Failed to parse metadata: ' + str(e))
 " 2>/dev/null)
-        expected_sha256=$(python3 -c "
-import json, sys
-with open('$metadata_file') as f:
-    d = json.load(f)
-p = [x for x in d.get('platforms', []) if x.get('os') == '$platform_os' and x.get('arch') == '$platform_arch']
-print(p[0].get('sha256', '') if p else '')
-" 2>/dev/null)
+
+        if [[ "$python_result" == ERROR:* ]]; then
+            print_error "${python_result#ERROR:} for $platform_os/$platform_arch"
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        fi
+
+        download_url="${python_result%%|*}"
+        expected_sha256="${python_result##*|}"
     else
         print_error "Neither jq nor python3 available for JSON parsing"
         rm -rf "$temp_dir" "$temp_backup"
@@ -525,11 +553,7 @@ print(p[0].get('sha256', '') if p else '')
     fi
 
     if [ -z "$download_url" ]; then
-        print_error "Could not find download URL for platform $platform_os/$platform_arch"
-        print_error "Available platforms in metadata:"
-        if command_exists jq; then
-            jq -r '.platforms[] | "  - \(.os)/\(.arch)"' "$metadata_file" >&2
-        fi
+        print_error "Could not extract download URL from metadata for platform $platform_os/$platform_arch"
         rm -rf "$temp_dir" "$temp_backup"
         return 1
     fi
