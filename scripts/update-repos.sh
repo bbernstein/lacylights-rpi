@@ -625,6 +625,13 @@ except Exception as e:
         if [ -n "$extracted_binary" ] && [ -f "$extracted_binary" ]; then
             mv "$extracted_binary" "$temp_dir/extract/lacylights-server"
         fi
+        # Fail early if binary wasn't found or rename failed
+        if [ ! -f "$temp_dir/extract/lacylights-server" ]; then
+            print_error "Go backend binary not found in archive after extraction"
+            print_error "Expected binary matching 'lacylights-*' in archive"
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        fi
     else
         # Other archives: strip top-level directory
         if ! tar -xzf "$archive_file" -C "$temp_dir/extract" --strip-components=1; then
