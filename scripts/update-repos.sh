@@ -302,7 +302,8 @@ restore_from_backup() {
     if [ "$repo_name" = "lacylights-go" ]; then
         if [ -f "lacylights-server" ]; then
             chmod +x lacylights-server
-            sudo chown lacylights:lacylights lacylights-server
+            # Use full path for sudoers compatibility
+            sudo chown lacylights:lacylights "$repo_dir/lacylights-server"
         fi
     elif [ -f "package.json" ]; then
         # Fix npm cache permissions before running npm commands
@@ -607,16 +608,38 @@ except Exception as e:
         return 1
     fi
 
-    # All distribution server archives use the same structure with one top-level directory
-    local strip_components=1
-
     # Extract to temporary location
     print_status "Extracting $repo_name..."
     mkdir -p "$temp_dir/extract"
-    if ! tar -xzf "$archive_file" -C "$temp_dir/extract" --strip-components=$strip_components; then
-        print_error "Failed to extract archive"
-        rm -rf "$temp_dir" "$temp_backup"
-        return 1
+
+    # Go archives contain just the binary (no directory structure)
+    # Other archives have a top-level directory that needs stripping
+    if [ "$repo_name" = "lacylights-go" ]; then
+        # Go archive: extract flat, then rename binary to expected name
+        if ! tar -xzf "$archive_file" -C "$temp_dir/extract"; then
+            print_error "Failed to extract archive"
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        fi
+        # Rename platform-specific binary to lacylights-server
+        local extracted_binary=$(find "$temp_dir/extract" -maxdepth 1 -name "lacylights-*" -type f | head -1)
+        if [ -n "$extracted_binary" ] && [ -f "$extracted_binary" ]; then
+            mv "$extracted_binary" "$temp_dir/extract/lacylights-server"
+        fi
+        # Fail early if binary wasn't found or rename failed
+        if [ ! -f "$temp_dir/extract/lacylights-server" ]; then
+            print_error "Go backend binary not found in archive after extraction"
+            print_error "Expected binary matching 'lacylights-*' in archive"
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        fi
+    else
+        # Other archives: strip top-level directory
+        if ! tar -xzf "$archive_file" -C "$temp_dir/extract" --strip-components=1; then
+            print_error "Failed to extract archive"
+            rm -rf "$temp_dir" "$temp_backup"
+            return 1
+        fi
     fi
 
     # Create permanent backup before any destructive operations
@@ -705,13 +728,50 @@ except Exception as e:
         # Frontend uses pre-built static export - no npm install or build needed
         print_success "Using pre-built static export for $repo_name (no build required)"
     elif [ "$repo_name" = "lacylights-go" ]; then
-        # Go backend is a pre-built binary - just ensure it's executable
+        # Go backend is a pre-built binary - set up and deploy to backend directory
         print_status "Setting up Go backend binary..."
         pushd "$repo_dir" >/dev/null
         if [ -f "lacylights-server" ]; then
             chmod +x lacylights-server
-            sudo chown lacylights:lacylights lacylights-server
-            print_success "Go backend binary ready"
+            # Use full path for sudoers compatibility
+            sudo chown lacylights:lacylights "$repo_dir/lacylights-server"
+            print_success "Go backend binary ready in repos directory"
+
+            # Deploy binary to the backend directory where the systemd service runs
+            local backend_dir="$LACYLIGHTS_ROOT/backend"
+            if [ -d "$backend_dir" ]; then
+                print_status "Deploying binary to backend directory..."
+                # Copy the binary to the backend directory
+                if cp lacylights-server "$backend_dir/lacylights-server"; then
+                    chmod +x "$backend_dir/lacylights-server"
+                    sudo chown lacylights:lacylights "$backend_dir/lacylights-server"
+                    print_success "Go backend binary deployed to $backend_dir"
+                else
+                    print_error "Failed to copy binary to backend directory"
+                    popd >/dev/null
+                    restore_from_backup "$backup_file" "$repo_name"
+                    return 1
+                fi
+            else
+                print_warning "Backend directory $backend_dir not found, creating it..."
+                if ! mkdir -p "$backend_dir"; then
+                    print_error "Failed to create backend directory"
+                    popd >/dev/null
+                    restore_from_backup "$backup_file" "$repo_name"
+                    return 1
+                fi
+                sudo chown lacylights:lacylights "$backend_dir"
+                if cp lacylights-server "$backend_dir/lacylights-server"; then
+                    chmod +x "$backend_dir/lacylights-server"
+                    sudo chown lacylights:lacylights "$backend_dir/lacylights-server"
+                    print_success "Go backend binary deployed to $backend_dir"
+                else
+                    print_error "Failed to copy binary to backend directory"
+                    popd >/dev/null
+                    restore_from_backup "$backup_file" "$repo_name"
+                    return 1
+                fi
+            fi
         else
             print_error "Go backend binary not found in archive"
             print_status "Attempting to restore from backup..."
