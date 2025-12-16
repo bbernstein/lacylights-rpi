@@ -360,9 +360,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --exclude '*' \
         ./ "$PI_HOST:$BACKEND_REMOTE/"
 
-    # Ensure binary is executable and owned by lacylights
-    print_info "Setting binary permissions..."
-    ssh "$PI_HOST" "sudo chmod +x $BACKEND_REMOTE/lacylights-server && sudo chown lacylights:lacylights $BACKEND_REMOTE/lacylights-server"
+    # Ensure backend directory and binary are owned by lacylights
+    # This is necessary because rsync preserves Mac ownership
+    print_info "Setting backend permissions..."
+    ssh "$PI_HOST" "sudo chown -R lacylights:lacylights $BACKEND_REMOTE && sudo chmod +x $BACKEND_REMOTE/lacylights-server"
 
     # Update systemd service file to use Go backend
     print_info "Updating systemd service file..."
