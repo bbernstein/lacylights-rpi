@@ -660,16 +660,16 @@ if [ "$REBUILD_ON_PI" = true ]; then
     if [ "$DEPLOY_FRONTEND" = true ]; then
         BUILD_COMMANDS+="echo '[INFO] Rebuilding frontend...'
 cd $FRONTEND_REMOTE
-npm install --production
-npm run build
+sudo -u lacylights npm install --production
+sudo -u lacylights npm run build
 "
     fi
 
     if [ "$DEPLOY_MCP" = true ]; then
         BUILD_COMMANDS+="echo '[INFO] Rebuilding MCP server...'
 cd $MCP_REMOTE
-npm install --production
-npm run build
+sudo -u pi npm install --production
+sudo -u pi npm run build
 "
     fi
 
@@ -703,14 +703,14 @@ if [ "$REBUILD_ON_PI" = false ]; then
     if [ "$DEPLOY_FRONTEND" = true ]; then
         INSTALL_COMMANDS+="echo '[INFO] Installing frontend dependencies...'
 cd $FRONTEND_REMOTE
-npm install --production
+sudo -u lacylights npm install --production
 "
     fi
 
     if [ "$DEPLOY_MCP" = true ]; then
         INSTALL_COMMANDS+="echo '[INFO] Installing MCP dependencies...'
 cd $MCP_REMOTE
-npm install --production
+sudo -u pi npm install --production
 "
     fi
 
