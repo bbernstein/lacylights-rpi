@@ -700,11 +700,14 @@ except Exception as e:
         lacylights-go)
             if systemctl is-active --quiet lacylights; then
                 sudo systemctl stop lacylights
+                # Wait for process to fully terminate before replacing binary
+                sleep 2
             fi
             ;;
         lacylights-fe)
             if systemctl is-active --quiet lacylights-frontend; then
                 sudo systemctl stop lacylights-frontend
+                sleep 1
             fi
             ;;
         lacylights-mcp)
@@ -713,6 +716,8 @@ except Exception as e:
             if systemctl is-active --quiet lacylights; then
                 print_status "Stopping backend service to pick up new MCP version..."
                 sudo systemctl stop lacylights
+                # Wait for process to fully terminate
+                sleep 2
             fi
             ;;
     esac
