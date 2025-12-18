@@ -273,6 +273,17 @@ else
     echo "[INFO] MCP directory exists (ownership verified)"
 fi
 
+# Logs directory (owned by lacylights for version management and service logs)
+if [ ! -d "/opt/lacylights/logs" ]; then
+    sudo mkdir -p /opt/lacylights/logs
+    sudo chown -R lacylights:lacylights /opt/lacylights/logs
+    echo "[INFO] Created /opt/lacylights/logs (owned by lacylights)"
+else
+    # Ensure proper ownership even if directory exists
+    sudo chown -R lacylights:lacylights /opt/lacylights/logs
+    echo "[INFO] Logs directory exists (ownership verified)"
+fi
+
 echo "[SUCCESS] All deployment directories ready"
 ENDSSH
 
