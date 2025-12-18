@@ -9,8 +9,8 @@ User=lacylights
 Group=lacylights
 WorkingDirectory=/opt/lacylights/backend
 
-# Environment variables
-EnvironmentFile=/opt/lacylights/backend/.env
+# Environment variables (optional - continues if file doesn't exist)
+EnvironmentFile=-/opt/lacylights/backend/.env
 
 # Start the Go backend server
 ExecStart=/opt/lacylights/backend/lacylights-server
