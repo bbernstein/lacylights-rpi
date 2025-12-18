@@ -1148,10 +1148,11 @@ main() {
 
         update-all)
             # Update all repos to latest
+            # Update frontend and MCP first, then backend last to avoid self-update interruption
             print_status "Updating all repositories to latest versions..."
             local failed=0
 
-            for repo in lacylights-go lacylights-fe lacylights-mcp; do
+            for repo in lacylights-fe lacylights-mcp lacylights-go; do
                 if ! update_repo "$repo" "latest"; then
                     failed=1
                 fi
