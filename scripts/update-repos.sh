@@ -794,6 +794,52 @@ except Exception as e:
     if [ "$repo_name" = "lacylights-fe" ]; then
         # Frontend uses pre-built static export - no npm install or build needed
         print_success "Using pre-built static export for $repo_name (no build required)"
+
+        # Deploy frontend to frontend-src directory where the systemd service runs
+        local frontend_dir="$LACYLIGHTS_ROOT/frontend-src"
+        if [ -d "$frontend_dir" ]; then
+            print_status "Deploying frontend to frontend-src directory..."
+            # Remove old files but keep node_modules if it exists
+            if [ -d "$frontend_dir/node_modules" ]; then
+                print_status "Preserving existing node_modules..."
+                mv "$frontend_dir/node_modules" "$LACYLIGHTS_ROOT/node_modules.tmp"
+            fi
+            # Remove old frontend files
+            rm -rf "$frontend_dir"/*
+            # Copy new files from repos to frontend-src
+            if cp -r "$repo_dir"/* "$frontend_dir/"; then
+                # Restore node_modules if it was preserved
+                if [ -d "$LACYLIGHTS_ROOT/node_modules.tmp" ]; then
+                    mv "$LACYLIGHTS_ROOT/node_modules.tmp" "$frontend_dir/node_modules"
+                fi
+                sudo chown -R pi:pi "$frontend_dir"
+                print_success "Frontend deployed to $frontend_dir"
+            else
+                print_error "Failed to copy frontend to frontend-src directory"
+                # Restore node_modules if it was backed up
+                if [ -d "$LACYLIGHTS_ROOT/node_modules.tmp" ]; then
+                    mkdir -p "$frontend_dir"
+                    mv "$LACYLIGHTS_ROOT/node_modules.tmp" "$frontend_dir/node_modules"
+                fi
+                restore_from_backup "$backup_file" "$repo_name"
+                return 1
+            fi
+        else
+            print_warning "Frontend directory $frontend_dir not found, creating it..."
+            if ! mkdir -p "$frontend_dir"; then
+                print_error "Failed to create frontend directory"
+                restore_from_backup "$backup_file" "$repo_name"
+                return 1
+            fi
+            if cp -r "$repo_dir"/* "$frontend_dir/"; then
+                sudo chown -R pi:pi "$frontend_dir"
+                print_success "Frontend deployed to $frontend_dir"
+            else
+                print_error "Failed to copy frontend to frontend-src directory"
+                restore_from_backup "$backup_file" "$repo_name"
+                return 1
+            fi
+        fi
     elif [ "$repo_name" = "lacylights-go" ]; then
         # Go backend is a pre-built binary - set up and deploy to backend directory
         print_status "Setting up Go backend binary..."
