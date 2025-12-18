@@ -792,35 +792,45 @@ except Exception as e:
 
     # Install dependencies and build (skip for pre-built frontend and Go backend)
     if [ "$repo_name" = "lacylights-fe" ]; then
-        # Frontend uses pre-built static export - no npm install or build needed
+        # Frontend uses pre-built static export - no build needed, but npm install required for next binary
         print_success "Using pre-built static export for $repo_name (no build required)"
 
         # Deploy frontend to frontend-src directory where the systemd service runs
         local frontend_dir="$LACYLIGHTS_ROOT/frontend-src"
         if [ -d "$frontend_dir" ]; then
             print_status "Deploying frontend to frontend-src directory..."
-            # Remove old files but keep node_modules if it exists
-            if [ -d "$frontend_dir/node_modules" ]; then
-                print_status "Preserving existing node_modules..."
-                mv "$frontend_dir/node_modules" "$LACYLIGHTS_ROOT/node_modules.tmp"
-            fi
-            # Remove old frontend files
+            # Remove old files including old node_modules (dependencies may have changed)
             rm -rf "$frontend_dir"/*
             # Copy new files from repos to frontend-src
             if cp -r "$repo_dir"/* "$frontend_dir/"; then
-                # Restore node_modules if it was preserved
-                if [ -d "$LACYLIGHTS_ROOT/node_modules.tmp" ]; then
-                    mv "$LACYLIGHTS_ROOT/node_modules.tmp" "$frontend_dir/node_modules"
-                fi
                 sudo chown -R pi:pi "$frontend_dir"
-                print_success "Frontend deployed to $frontend_dir"
+                print_success "Frontend files deployed to $frontend_dir"
+
+                # Install dependencies (required for npm start to work)
+                print_status "Installing frontend dependencies..."
+                pushd "$frontend_dir" >/dev/null
+                # Use npm cache directory to avoid EACCES errors
+                local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
+                mkdir -p "$npm_cache"
+                sudo chown -R pi:pi "$npm_cache"
+
+                # Try npm ci first (faster and more reliable), fall back to npm install
+                if sudo -u pi npm ci --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                    print_success "Frontend dependencies installed via npm ci"
+                else
+                    print_warning "npm ci failed, falling back to npm install..."
+                    if sudo -u pi npm install --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                        print_success "Frontend dependencies installed via npm install"
+                    else
+                        print_error "Failed to install frontend dependencies"
+                        popd >/dev/null
+                        restore_from_backup "$backup_file" "$repo_name"
+                        return 1
+                    fi
+                fi
+                popd >/dev/null
             else
                 print_error "Failed to copy frontend to frontend-src directory"
-                # Restore node_modules if it was backed up
-                if [ -d "$LACYLIGHTS_ROOT/node_modules.tmp" ]; then
-                    mkdir -p "$frontend_dir"
-                    mv "$LACYLIGHTS_ROOT/node_modules.tmp" "$frontend_dir/node_modules"
-                fi
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
@@ -833,7 +843,31 @@ except Exception as e:
             fi
             if cp -r "$repo_dir"/* "$frontend_dir/"; then
                 sudo chown -R pi:pi "$frontend_dir"
-                print_success "Frontend deployed to $frontend_dir"
+                print_success "Frontend files deployed to $frontend_dir"
+
+                # Install dependencies (required for npm start to work)
+                print_status "Installing frontend dependencies..."
+                pushd "$frontend_dir" >/dev/null
+                # Use npm cache directory to avoid EACCES errors
+                local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
+                mkdir -p "$npm_cache"
+                sudo chown -R pi:pi "$npm_cache"
+
+                # Try npm ci first (faster and more reliable), fall back to npm install
+                if sudo -u pi npm ci --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                    print_success "Frontend dependencies installed via npm ci"
+                else
+                    print_warning "npm ci failed, falling back to npm install..."
+                    if sudo -u pi npm install --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                        print_success "Frontend dependencies installed via npm install"
+                    else
+                        print_error "Failed to install frontend dependencies"
+                        popd >/dev/null
+                        restore_from_backup "$backup_file" "$repo_name"
+                        return 1
+                    fi
+                fi
+                popd >/dev/null
             else
                 print_error "Failed to copy frontend to frontend-src directory"
                 restore_from_backup "$backup_file" "$repo_name"
