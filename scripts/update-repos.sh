@@ -699,30 +699,22 @@ except Exception as e:
     case "$repo_name" in
         lacylights-go)
             if systemctl is-active --quiet lacylights; then
+                print_status "Stopping lacylights service..."
                 sudo systemctl stop lacylights
-                # Wait for process to fully terminate before replacing binary
-                # Use longer sleep and verify process is gone
-                sleep 3
-                # Extra verification: check if process is still running
+                # Wait for systemd to confirm service is stopped
                 local wait_count=0
-                while pgrep -f lacylights-server >/dev/null 2>&1 && [ $wait_count -lt 5 ]; do
-                    print_status "Waiting for lacylights-server process to terminate..."
+                while systemctl is-active --quiet lacylights && [ $wait_count -lt 30 ]; do
                     sleep 1
                     wait_count=$((wait_count + 1))
                 done
-                # Verify process actually terminated
-                if pgrep -f lacylights-server >/dev/null 2>&1; then
-                    print_error "lacylights-server process failed to terminate after 8 seconds"
-                    print_status "Attempting to force kill..."
-                    sudo pkill -9 -f lacylights-server
-                    sleep 1
-                    if pgrep -f lacylights-server >/dev/null 2>&1; then
-                        print_error "Failed to kill lacylights-server process. Aborting update."
-                        rm -rf "$temp_dir" "$temp_backup"
-                        return 1
-                    fi
-                    print_success "Process forcefully terminated"
+                # Verify service actually stopped
+                if systemctl is-active --quiet lacylights; then
+                    print_error "Service failed to stop after 30 seconds. Aborting update."
+                    rm -rf "$temp_dir" "$temp_backup"
+                    return 1
                 fi
+                # Give the process a moment to fully exit
+                sleep 1
             fi
             ;;
         lacylights-fe)
@@ -737,28 +729,20 @@ except Exception as e:
             if systemctl is-active --quiet lacylights; then
                 print_status "Stopping backend service to pick up new MCP version..."
                 sudo systemctl stop lacylights
-                # Wait for process to fully terminate
-                sleep 3
-                # Extra verification: check if process is still running
+                # Wait for systemd to confirm service is stopped
                 local wait_count=0
-                while pgrep -f lacylights-server >/dev/null 2>&1 && [ $wait_count -lt 5 ]; do
-                    print_status "Waiting for lacylights-server process to terminate..."
+                while systemctl is-active --quiet lacylights && [ $wait_count -lt 30 ]; do
                     sleep 1
                     wait_count=$((wait_count + 1))
                 done
-                # Verify process actually terminated
-                if pgrep -f lacylights-server >/dev/null 2>&1; then
-                    print_error "lacylights-server process failed to terminate after 8 seconds"
-                    print_status "Attempting to force kill..."
-                    sudo pkill -9 -f lacylights-server
-                    sleep 1
-                    if pgrep -f lacylights-server >/dev/null 2>&1; then
-                        print_error "Failed to kill lacylights-server process. Aborting update."
-                        rm -rf "$temp_dir" "$temp_backup"
-                        return 1
-                    fi
-                    print_success "Process forcefully terminated"
+                # Verify service actually stopped
+                if systemctl is-active --quiet lacylights; then
+                    print_error "Service failed to stop after 30 seconds. Aborting update."
+                    rm -rf "$temp_dir" "$temp_backup"
+                    return 1
                 fi
+                # Give the process a moment to fully exit
+                sleep 1
             fi
             ;;
     esac
