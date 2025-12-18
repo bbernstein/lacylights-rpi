@@ -701,13 +701,21 @@ except Exception as e:
             if systemctl is-active --quiet lacylights; then
                 sudo systemctl stop lacylights
                 # Wait for process to fully terminate before replacing binary
-                sleep 2
+                # Use longer sleep and verify process is gone
+                sleep 3
+                # Extra verification: check if process is still running
+                local wait_count=0
+                while pgrep -f lacylights-server >/dev/null 2>&1 && [ $wait_count -lt 5 ]; do
+                    print_status "Waiting for lacylights-server process to terminate..."
+                    sleep 1
+                    wait_count=$((wait_count + 1))
+                done
             fi
             ;;
         lacylights-fe)
             if systemctl is-active --quiet lacylights-frontend; then
                 sudo systemctl stop lacylights-frontend
-                sleep 1
+                sleep 2
             fi
             ;;
         lacylights-mcp)
@@ -717,7 +725,14 @@ except Exception as e:
                 print_status "Stopping backend service to pick up new MCP version..."
                 sudo systemctl stop lacylights
                 # Wait for process to fully terminate
-                sleep 2
+                sleep 3
+                # Extra verification: check if process is still running
+                local wait_count=0
+                while pgrep -f lacylights-server >/dev/null 2>&1 && [ $wait_count -lt 5 ]; do
+                    print_status "Waiting for lacylights-server process to terminate..."
+                    sleep 1
+                    wait_count=$((wait_count + 1))
+                done
             fi
             ;;
     esac
@@ -759,16 +774,6 @@ except Exception as e:
             cp "$temp_backup/lacylights.db-wal" "$repo_dir/lacylights.db-wal"
         fi
     fi
-
-    # Write version file to deployment directory (where services actually run)
-    local version_file_dir
-    case "$repo_name" in
-        "lacylights-go") version_file_dir="$LACYLIGHTS_ROOT/backend" ;;
-        "lacylights-fe") version_file_dir="$LACYLIGHTS_ROOT/frontend-src" ;;
-        "lacylights-mcp") version_file_dir="$LACYLIGHTS_ROOT/mcp" ;;
-        *) version_file_dir="$repo_dir" ;;
-    esac
-    echo "$version_to_install" > "$version_file_dir/.lacylights-version"
 
     # Clean up
     rm -rf "$temp_dir" "$temp_backup"
@@ -980,6 +985,17 @@ except Exception as e:
             fi
             ;;
     esac
+
+    # Write version file to deployment directory ONLY after successful deployment
+    # This ensures version file matches actual deployed version
+    local version_file_dir
+    case "$repo_name" in
+        "lacylights-go") version_file_dir="$LACYLIGHTS_ROOT/backend" ;;
+        "lacylights-fe") version_file_dir="$LACYLIGHTS_ROOT/frontend-src" ;;
+        "lacylights-mcp") version_file_dir="$LACYLIGHTS_ROOT/mcp" ;;
+        *) version_file_dir="$repo_dir" ;;
+    esac
+    echo "$version_to_install" > "$version_file_dir/.lacylights-version"
 
     print_success "$repo_name updated to $version_to_install"
     return 0
