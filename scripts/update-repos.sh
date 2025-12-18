@@ -799,14 +799,17 @@ except Exception as e:
         local frontend_dir="$LACYLIGHTS_ROOT/frontend-src"
         if [ -d "$frontend_dir" ]; then
             print_status "Deploying frontend to frontend-src directory..."
-            # Ensure directory is owned by lacylights for the copy operation
+            # Ensure directory has proper group ownership and permissions
+            # (Both pi and lacylights users can write via shared group)
             sudo chown -R lacylights:lacylights "$frontend_dir"
+            sudo chmod -R g+w "$frontend_dir"
+            sudo chmod g+s "$frontend_dir"
             # Remove old files including old node_modules (dependencies may have changed)
             rm -rf "$frontend_dir"/*
             # Copy new files from repos to frontend-src
             if cp -r "$repo_dir"/* "$frontend_dir/"; then
-                # Change ownership to pi:pi for npm operations
-                sudo chown -R pi:pi "$frontend_dir"
+                # Ensure new files have group write permissions
+                sudo chmod -R g+w "$frontend_dir"
                 print_success "Frontend files deployed to $frontend_dir"
 
                 # Install dependencies (required for npm start to work)
@@ -815,15 +818,17 @@ except Exception as e:
                 # Use npm cache directory to avoid EACCES errors
                 local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
                 sudo mkdir -p "$npm_cache"
-                sudo chown -R pi:pi "$npm_cache"
+                sudo chown -R lacylights:lacylights "$npm_cache"
+                sudo chmod -R g+w "$npm_cache"
+                sudo chmod g+s "$npm_cache"
 
                 # Try npm ci first (faster and more reliable), fall back to npm install
-                # Run as pi user with proper environment to avoid permission issues
-                if sudo -u pi env HOME=/home/pi npm_config_cache="$npm_cache" npm ci 2>&1 | tee -a "$UPDATE_LOG"; then
+                # Both pi and lacylights users can run npm due to shared group ownership
+                if npm ci --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
                     print_success "Frontend dependencies installed via npm ci"
                 else
                     print_warning "npm ci failed, falling back to npm install..."
-                    if sudo -u pi env HOME=/home/pi npm_config_cache="$npm_cache" npm install 2>&1 | tee -a "$UPDATE_LOG"; then
+                    if npm install --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
                         print_success "Frontend dependencies installed via npm install"
                     else
                         print_error "Failed to install frontend dependencies"
@@ -840,13 +845,16 @@ except Exception as e:
             fi
         else
             print_warning "Frontend directory $frontend_dir not found, creating it..."
-            if ! mkdir -p "$frontend_dir"; then
+            if ! sudo mkdir -p "$frontend_dir"; then
                 print_error "Failed to create frontend directory"
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
+            sudo chown -R lacylights:lacylights "$frontend_dir"
+            sudo chmod -R g+w "$frontend_dir"
+            sudo chmod g+s "$frontend_dir"
             if cp -r "$repo_dir"/* "$frontend_dir/"; then
-                sudo chown -R pi:pi "$frontend_dir"
+                sudo chmod -R g+w "$frontend_dir"
                 print_success "Frontend files deployed to $frontend_dir"
 
                 # Install dependencies (required for npm start to work)
@@ -855,15 +863,17 @@ except Exception as e:
                 # Use npm cache directory to avoid EACCES errors
                 local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
                 sudo mkdir -p "$npm_cache"
-                sudo chown -R pi:pi "$npm_cache"
+                sudo chown -R lacylights:lacylights "$npm_cache"
+                sudo chmod -R g+w "$npm_cache"
+                sudo chmod g+s "$npm_cache"
 
                 # Try npm ci first (faster and more reliable), fall back to npm install
-                # Run as pi user with proper environment to avoid permission issues
-                if sudo -u pi env HOME=/home/pi npm_config_cache="$npm_cache" npm ci 2>&1 | tee -a "$UPDATE_LOG"; then
+                # Both pi and lacylights users can run npm due to shared group ownership
+                if npm ci --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
                     print_success "Frontend dependencies installed via npm ci"
                 else
                     print_warning "npm ci failed, falling back to npm install..."
-                    if sudo -u pi env HOME=/home/pi npm_config_cache="$npm_cache" npm install 2>&1 | tee -a "$UPDATE_LOG"; then
+                    if npm install --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
                         print_success "Frontend dependencies installed via npm install"
                     else
                         print_error "Failed to install frontend dependencies"

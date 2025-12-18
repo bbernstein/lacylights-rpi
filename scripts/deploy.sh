@@ -251,15 +251,19 @@ else
     echo "[INFO] Backend directory exists"
 fi
 
-# Frontend source directory (owned by pi to match service user)
+# Frontend source directory (shared group ownership for pi and lacylights users)
 if [ ! -d "/opt/lacylights/frontend-src" ]; then
     sudo mkdir -p /opt/lacylights/frontend-src
-    sudo chown -R pi:pi /opt/lacylights/frontend-src
-    echo "[INFO] Created /opt/lacylights/frontend-src (owned by pi)"
+    sudo chown -R lacylights:lacylights /opt/lacylights/frontend-src
+    sudo chmod -R g+w /opt/lacylights/frontend-src
+    sudo chmod g+s /opt/lacylights/frontend-src
+    echo "[INFO] Created /opt/lacylights/frontend-src (shared: lacylights:lacylights with group write)"
 else
-    # Ensure proper ownership even if directory exists
-    sudo chown -R pi:pi /opt/lacylights/frontend-src
-    echo "[INFO] Frontend source directory exists (ownership verified)"
+    # Ensure proper ownership and permissions even if directory exists
+    sudo chown -R lacylights:lacylights /opt/lacylights/frontend-src
+    sudo chmod -R g+w /opt/lacylights/frontend-src
+    sudo chmod g+s /opt/lacylights/frontend-src
+    echo "[INFO] Frontend source directory exists (ownership and permissions verified)"
 fi
 
 # MCP directory (owned by pi for npm operations)
@@ -483,10 +487,10 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         --exclude '__tests__' \
         ./ "$PI_HOST:$FRONTEND_REMOTE/"
 
-    # Ensure frontend directory is owned by pi (matches service user)
+    # Ensure frontend directory has shared group ownership (both pi and lacylights can write)
     # This is necessary because rsync preserves Mac ownership
     print_info "Setting frontend permissions..."
-    ssh "$PI_HOST" "sudo chown -R pi:pi $FRONTEND_REMOTE"
+    ssh "$PI_HOST" "sudo chown -R lacylights:lacylights $FRONTEND_REMOTE && sudo chmod -R g+w $FRONTEND_REMOTE && sudo chmod g+s $FRONTEND_REMOTE"
 
     print_success "Frontend code and build artifacts synced"
 fi
@@ -627,7 +631,8 @@ fi
 
 if [ "$5" = true ]; then
     echo "[INFO] Setting frontend-src version to $2"
-    echo "$2" | sudo -u pi tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
+    # Both pi and lacylights can write due to shared group ownership
+    echo "$2" | sudo -u lacylights tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
 fi
 
 if [ "$6" = true ]; then
