@@ -444,6 +444,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     cat "$LOCAL_DIR/systemd/lacylights.service" | ssh "$PI_HOST" "sudo tee /etc/systemd/system/lacylights.service > /dev/null"
     ssh "$PI_HOST" "sudo systemctl daemon-reload"
 
+    print_info "Updating sudoers file for self-updates..."
+    cat "$LOCAL_DIR/systemd/lacylights-sudoers" | ssh "$PI_HOST" "sudo tee /etc/sudoers.d/lacylights > /dev/null"
+    ssh "$PI_HOST" "sudo chmod 0440 /etc/sudoers.d/lacylights"
+
     print_success "Backend binary synced"
 fi
 
