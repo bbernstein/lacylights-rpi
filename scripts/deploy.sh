@@ -242,6 +242,30 @@ set -e
 sudo mkdir -p /opt/lacylights
 echo "[INFO] Base directory /opt/lacylights exists"
 
+# Add pi user to lacylights group for shared directory access
+# This allows both manual deployments (as pi) and UI updates (as lacylights) to work
+if ! groups pi | grep -q lacylights; then
+    sudo usermod -a -G lacylights pi
+    echo "[INFO] Added pi user to lacylights group"
+else
+    echo "[INFO] pi user already in lacylights group"
+fi
+
+# npm cache directory (shared group ownership for pi and lacylights users)
+if [ ! -d "/opt/lacylights/.npm-cache" ]; then
+    sudo mkdir -p /opt/lacylights/.npm-cache
+    sudo chown -R lacylights:lacylights /opt/lacylights/.npm-cache
+    sudo chmod -R g+w /opt/lacylights/.npm-cache
+    sudo chmod g+s /opt/lacylights/.npm-cache
+    echo "[INFO] Created /opt/lacylights/.npm-cache (shared: lacylights:lacylights with group write)"
+else
+    # Ensure proper ownership and permissions even if directory exists
+    sudo chown -R lacylights:lacylights /opt/lacylights/.npm-cache
+    sudo chmod -R g+w /opt/lacylights/.npm-cache
+    sudo chmod g+s /opt/lacylights/.npm-cache
+    echo "[INFO] npm cache directory exists (ownership and permissions verified)"
+fi
+
 # Backend directory (owned by lacylights service user)
 if [ ! -d "/opt/lacylights/backend" ]; then
     sudo mkdir -p /opt/lacylights/backend
@@ -453,6 +477,41 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     ssh "$PI_HOST" "sudo chmod 0440 /etc/sudoers.d/lacylights"
 
     print_success "Backend binary synced"
+fi
+
+# Deploy system configuration files (nginx and frontend service)
+print_header "Deploying System Configuration"
+
+# Deploy nginx configuration
+if [ -f "$LOCAL_DIR/nginx/lacylights" ]; then
+    print_info "Deploying nginx configuration..."
+    cat "$LOCAL_DIR/nginx/lacylights" | ssh "$PI_HOST" "sudo tee /etc/nginx/sites-available/lacylights > /dev/null"
+
+    # Enable the site if not already enabled
+    ssh "$PI_HOST" "sudo ln -sf /etc/nginx/sites-available/lacylights /etc/nginx/sites-enabled/lacylights"
+
+    # Test nginx configuration
+    if ssh "$PI_HOST" "sudo nginx -t" >/dev/null 2>&1; then
+        print_success "nginx configuration deployed and validated"
+        # Reload nginx to apply changes
+        ssh "$PI_HOST" "sudo systemctl reload nginx"
+        print_success "nginx reloaded"
+    else
+        print_error "nginx configuration test failed"
+        print_warning "Continuing with deployment, but nginx may not be configured correctly"
+    fi
+else
+    print_warning "nginx configuration file not found at $LOCAL_DIR/nginx/lacylights"
+fi
+
+# Deploy frontend systemd service
+if [ -f "$LOCAL_DIR/systemd/lacylights-frontend.service" ]; then
+    print_info "Deploying frontend systemd service..."
+    cat "$LOCAL_DIR/systemd/lacylights-frontend.service" | ssh "$PI_HOST" "sudo tee /etc/systemd/system/lacylights-frontend.service > /dev/null"
+    ssh "$PI_HOST" "sudo systemctl daemon-reload"
+    print_success "Frontend service file deployed"
+else
+    print_warning "Frontend service file not found at $LOCAL_DIR/systemd/lacylights-frontend.service"
 fi
 
 # Frontend Deployment

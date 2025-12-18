@@ -824,7 +824,7 @@ except Exception as e:
 
                 # Try npm ci first (faster and more reliable), fall back to npm install
                 # Both pi and lacylights users can run npm due to shared group ownership
-                npm ci --cache "$npm_cache" >> "$UPDATE_LOG" 2>&1
+                npm ci --cache "$npm_cache" >> "$LOG_FILE" 2>&1
                 npm_exit_code=$?
                 if [ $npm_exit_code -eq 0 ]; then
                     # Ensure node_modules has group write permissions (npm creates with 755)
@@ -832,7 +832,7 @@ except Exception as e:
                     print_success "Frontend dependencies installed via npm ci"
                 else
                     print_warning "npm ci failed, falling back to npm install..."
-                    npm install --cache "$npm_cache" >> "$UPDATE_LOG" 2>&1
+                    npm install --cache "$npm_cache" >> "$LOG_FILE" 2>&1
                     npm_exit_code=$?
                     if [ $npm_exit_code -eq 0 ]; then
                         # Ensure node_modules has group write permissions (npm creates with 755)
@@ -877,7 +877,7 @@ except Exception as e:
 
                 # Try npm ci first (faster and more reliable), fall back to npm install
                 # Both pi and lacylights users can run npm due to shared group ownership
-                npm ci --cache "$npm_cache" >> "$UPDATE_LOG" 2>&1
+                npm ci --cache "$npm_cache" >> "$LOG_FILE" 2>&1
                 npm_exit_code=$?
                 if [ $npm_exit_code -eq 0 ]; then
                     # Ensure node_modules has group write permissions (npm creates with 755)
@@ -885,7 +885,7 @@ except Exception as e:
                     print_success "Frontend dependencies installed via npm ci"
                 else
                     print_warning "npm ci failed, falling back to npm install..."
-                    npm install --cache "$npm_cache" >> "$UPDATE_LOG" 2>&1
+                    npm install --cache "$npm_cache" >> "$LOG_FILE" 2>&1
                     npm_exit_code=$?
                     if [ $npm_exit_code -eq 0 ]; then
                         # Ensure node_modules has group write permissions (npm creates with 755)
@@ -1059,14 +1059,16 @@ except Exception as e:
             local wait_time=1
             while [ $retry_count -lt $max_retries ]; do
                 sleep $wait_time
-                if sudo systemctl is-active --quiet lacylights-frontend; then
+                local service_state=$(sudo systemctl is-active lacylights-frontend 2>&1 || echo "failed")
+                log "DEBUG: Service state check: $service_state"
+                if [ "$service_state" = "active" ]; then
                     print_success "lacylights-frontend service started successfully"
                     break
                 fi
                 retry_count=$((retry_count + 1))
                 wait_time=$((wait_time * 2))
                 if [ $retry_count -lt $max_retries ]; then
-                    print_status "Service not ready, retrying in ${wait_time}s (attempt $((retry_count + 1))/$max_retries)..."
+                    print_status "Service not ready (state: $service_state), retrying in ${wait_time}s (attempt $((retry_count + 1))/$max_retries)..."
                 fi
             done
 
