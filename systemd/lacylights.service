@@ -27,7 +27,8 @@ StandardError=journal
 SyslogIdentifier=lacylights
 
 # Security settings
-NoNewPrivileges=true
+# NoNewPrivileges disabled to allow self-updates via sudo systemd-run
+# The sudoers file restricts which commands can be run with elevated privileges
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
