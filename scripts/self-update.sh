@@ -18,24 +18,30 @@ fi
 REPOSITORY="$1"
 VERSION="${2:-}"
 
-# Function to run the update in the background after a delay
-run_update_async() {
-    # Wait a few seconds to allow the HTTP response to be sent
-    sleep 3
+# Create a temporary script that will run in the background
+# This avoids issues with declare -f and function serialization
+TEMP_SCRIPT="/tmp/lacylights-update-$$"
+cat > "$TEMP_SCRIPT" << 'SCRIPT_EOF'
+#!/bin/bash
+# Wait a few seconds to allow the HTTP response to be sent
+sleep 3
 
-    # Run the actual update
-    if [ -n "$VERSION" ]; then
-        "$UPDATE_SCRIPT" update "$REPOSITORY" "$VERSION"
-    else
-        "$UPDATE_SCRIPT" update "$REPOSITORY"
-    fi
-}
+# Run the actual update
+SCRIPT_EOF
+
+# Add the update command with proper quoting
+if [ -n "$VERSION" ]; then
+    echo "\"$UPDATE_SCRIPT\" update \"$REPOSITORY\" \"$VERSION\"" >> "$TEMP_SCRIPT"
+else
+    echo "\"$UPDATE_SCRIPT\" update \"$REPOSITORY\"" >> "$TEMP_SCRIPT"
+fi
+
+# Make it executable
+chmod +x "$TEMP_SCRIPT"
 
 # Start the update in the background, detached from this process
-# Use nohup to prevent SIGHUP when parent exits
-# Redirect output to update log
-nohup bash -c "$(declare -f run_update_async); run_update_async" \
-    >> /opt/lacylights/logs/update.log 2>&1 &
+# Redirect output to update log and clean up temp script when done
+nohup bash -c "$TEMP_SCRIPT >> /opt/lacylights/logs/update.log 2>&1; rm -f $TEMP_SCRIPT" &
 
 # Disown the background process so it survives this script's exit
 disown
