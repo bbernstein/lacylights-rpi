@@ -825,10 +825,14 @@ except Exception as e:
                 # Try npm ci first (faster and more reliable), fall back to npm install
                 # Both pi and lacylights users can run npm due to shared group ownership
                 if npm ci --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                    # Ensure node_modules has group write permissions (npm creates with 755)
+                    sudo chmod -R g+w "$frontend_dir/node_modules" 2>/dev/null || true
                     print_success "Frontend dependencies installed via npm ci"
                 else
                     print_warning "npm ci failed, falling back to npm install..."
                     if npm install --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                        # Ensure node_modules has group write permissions (npm creates with 755)
+                        sudo chmod -R g+w "$frontend_dir/node_modules" 2>/dev/null || true
                         print_success "Frontend dependencies installed via npm install"
                     else
                         print_error "Failed to install frontend dependencies"
@@ -870,10 +874,14 @@ except Exception as e:
                 # Try npm ci first (faster and more reliable), fall back to npm install
                 # Both pi and lacylights users can run npm due to shared group ownership
                 if npm ci --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                    # Ensure node_modules has group write permissions (npm creates with 755)
+                    sudo chmod -R g+w "$frontend_dir/node_modules" 2>/dev/null || true
                     print_success "Frontend dependencies installed via npm ci"
                 else
                     print_warning "npm ci failed, falling back to npm install..."
                     if npm install --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                        # Ensure node_modules has group write permissions (npm creates with 755)
+                        sudo chmod -R g+w "$frontend_dir/node_modules" 2>/dev/null || true
                         print_success "Frontend dependencies installed via npm install"
                     else
                         print_error "Failed to install frontend dependencies"
