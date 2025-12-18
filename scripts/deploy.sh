@@ -703,7 +703,7 @@ if [ "$REBUILD_ON_PI" = false ]; then
     if [ "$DEPLOY_FRONTEND" = true ]; then
         INSTALL_COMMANDS+="echo '[INFO] Installing frontend dependencies...'
 cd $FRONTEND_REMOTE
-sudo -u lacylights npm install --production
+sudo -u pi npm install --production
 "
     fi
 
