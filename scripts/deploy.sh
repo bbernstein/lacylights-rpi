@@ -231,6 +231,58 @@ else
     print_success "Hostname is correctly set to $DESIRED_HOSTNAME"
 fi
 
+# Ensure deployment directories exist
+print_header "Ensuring Deployment Directories"
+
+print_info "Creating deployment directories on Raspberry Pi..."
+ssh "$PI_HOST" << 'ENDSSH'
+set -e
+
+# Ensure base directory exists
+sudo mkdir -p /opt/lacylights
+echo "[INFO] Base directory /opt/lacylights exists"
+
+# Backend directory (owned by lacylights service user)
+if [ ! -d "/opt/lacylights/backend" ]; then
+    sudo mkdir -p /opt/lacylights/backend
+    sudo chown -R lacylights:lacylights /opt/lacylights/backend
+    echo "[INFO] Created /opt/lacylights/backend (owned by lacylights)"
+else
+    echo "[INFO] Backend directory exists"
+fi
+
+# Frontend source directory (owned by pi for npm operations)
+if [ ! -d "/opt/lacylights/frontend-src" ]; then
+    sudo mkdir -p /opt/lacylights/frontend-src
+    sudo chown -R pi:pi /opt/lacylights/frontend-src
+    echo "[INFO] Created /opt/lacylights/frontend-src (owned by pi)"
+else
+    # Ensure proper ownership even if directory exists
+    sudo chown -R pi:pi /opt/lacylights/frontend-src
+    echo "[INFO] Frontend source directory exists (ownership verified)"
+fi
+
+# MCP directory (owned by pi for npm operations)
+if [ ! -d "/opt/lacylights/mcp" ]; then
+    sudo mkdir -p /opt/lacylights/mcp
+    sudo chown -R pi:pi /opt/lacylights/mcp
+    echo "[INFO] Created /opt/lacylights/mcp (owned by pi)"
+else
+    # Ensure proper ownership even if directory exists
+    sudo chown -R pi:pi /opt/lacylights/mcp
+    echo "[INFO] MCP directory exists (ownership verified)"
+fi
+
+echo "[SUCCESS] All deployment directories ready"
+ENDSSH
+
+if [ $? -eq 0 ]; then
+    print_success "Deployment directories verified"
+else
+    print_error "Failed to create deployment directories"
+    exit 1
+fi
+
 # Local Build Phase
 if [ "$SKIP_LOCAL_BUILD" = false ]; then
     print_header "Building Projects Locally"
