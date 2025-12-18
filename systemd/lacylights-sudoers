@@ -1,0 +1,12 @@
+# Allow lacylights user to run systemd-run for self-updates
+# This is needed because the lacylights service has NoNewPrivileges=true
+# Also allow systemctl commands needed by update-repos.sh script
+# Place this file in /etc/sudoers.d/lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights-frontend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights-frontend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights-frontend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload

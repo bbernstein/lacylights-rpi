@@ -444,6 +444,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     cat "$LOCAL_DIR/systemd/lacylights.service" | ssh "$PI_HOST" "sudo tee /etc/systemd/system/lacylights.service > /dev/null"
     ssh "$PI_HOST" "sudo systemctl daemon-reload"
 
+    print_info "Updating sudoers file for self-updates..."
+    cat "$LOCAL_DIR/systemd/lacylights-sudoers" | ssh "$PI_HOST" "sudo tee /etc/sudoers.d/lacylights > /dev/null"
+    ssh "$PI_HOST" "sudo chmod 0440 /etc/sudoers.d/lacylights"
+
     print_success "Backend binary synced"
 fi
 
@@ -533,10 +537,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --rsync-path="sudo rsync" \
         "$LOCAL_DIR/scripts/update-repos.sh" \
         "$LOCAL_DIR/scripts/update-repos-wrapper.sh" \
+        "$LOCAL_DIR/scripts/self-update.sh" \
         "$PI_HOST:/opt/lacylights/scripts/"
 
     # Set permissions
-    ssh "$PI_HOST" "sudo chmod +x /opt/lacylights/scripts/update-repos.sh /opt/lacylights/scripts/update-repos-wrapper.sh && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
+    ssh "$PI_HOST" "sudo chmod +x /opt/lacylights/scripts/update-repos.sh /opt/lacylights/scripts/update-repos-wrapper.sh /opt/lacylights/scripts/self-update.sh && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
 
     print_success "Update scripts deployed"
 fi

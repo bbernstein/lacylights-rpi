@@ -699,15 +699,28 @@ except Exception as e:
     case "$repo_name" in
         lacylights-go)
             if systemctl is-active --quiet lacylights; then
+                print_status "Stopping lacylights service..."
                 sudo systemctl stop lacylights
-                # Wait for process to fully terminate before replacing binary
-                sleep 2
+                # Wait for systemd to confirm service is stopped
+                local wait_count=0
+                while systemctl is-active --quiet lacylights && [ $wait_count -lt 30 ]; do
+                    sleep 1
+                    wait_count=$((wait_count + 1))
+                done
+                # Verify service actually stopped
+                if systemctl is-active --quiet lacylights; then
+                    print_error "Service failed to stop after 30 seconds. Aborting update."
+                    rm -rf "$temp_dir" "$temp_backup"
+                    return 1
+                fi
+                # Give the process a moment to fully exit
+                sleep 1
             fi
             ;;
         lacylights-fe)
             if systemctl is-active --quiet lacylights-frontend; then
                 sudo systemctl stop lacylights-frontend
-                sleep 1
+                sleep 2
             fi
             ;;
         lacylights-mcp)
@@ -716,8 +729,20 @@ except Exception as e:
             if systemctl is-active --quiet lacylights; then
                 print_status "Stopping backend service to pick up new MCP version..."
                 sudo systemctl stop lacylights
-                # Wait for process to fully terminate
-                sleep 2
+                # Wait for systemd to confirm service is stopped
+                local wait_count=0
+                while systemctl is-active --quiet lacylights && [ $wait_count -lt 30 ]; do
+                    sleep 1
+                    wait_count=$((wait_count + 1))
+                done
+                # Verify service actually stopped
+                if systemctl is-active --quiet lacylights; then
+                    print_error "Service failed to stop after 30 seconds. Aborting update."
+                    rm -rf "$temp_dir" "$temp_backup"
+                    return 1
+                fi
+                # Give the process a moment to fully exit
+                sleep 1
             fi
             ;;
     esac
@@ -759,16 +784,6 @@ except Exception as e:
             cp "$temp_backup/lacylights.db-wal" "$repo_dir/lacylights.db-wal"
         fi
     fi
-
-    # Write version file to deployment directory (where services actually run)
-    local version_file_dir
-    case "$repo_name" in
-        "lacylights-go") version_file_dir="$LACYLIGHTS_ROOT/backend" ;;
-        "lacylights-fe") version_file_dir="$LACYLIGHTS_ROOT/frontend-src" ;;
-        "lacylights-mcp") version_file_dir="$LACYLIGHTS_ROOT/mcp" ;;
-        *) version_file_dir="$repo_dir" ;;
-    esac
-    echo "$version_to_install" > "$version_file_dir/.lacylights-version"
 
     # Clean up
     rm -rf "$temp_dir" "$temp_backup"
@@ -980,6 +995,17 @@ except Exception as e:
             fi
             ;;
     esac
+
+    # Write version file to deployment directory ONLY after successful deployment
+    # This ensures version file matches actual deployed version
+    local version_file_dir
+    case "$repo_name" in
+        "lacylights-go") version_file_dir="$LACYLIGHTS_ROOT/backend" ;;
+        "lacylights-fe") version_file_dir="$LACYLIGHTS_ROOT/frontend-src" ;;
+        "lacylights-mcp") version_file_dir="$LACYLIGHTS_ROOT/mcp" ;;
+        *) version_file_dir="$repo_dir" ;;
+    esac
+    echo "$version_to_install" > "$version_file_dir/.lacylights-version"
 
     print_success "$repo_name updated to $version_to_install"
     return 0
