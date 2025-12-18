@@ -251,14 +251,14 @@ else
     echo "[INFO] Backend directory exists"
 fi
 
-# Frontend source directory (owned by lacylights for version management updates)
+# Frontend source directory (owned by pi to match service user)
 if [ ! -d "/opt/lacylights/frontend-src" ]; then
     sudo mkdir -p /opt/lacylights/frontend-src
-    sudo chown -R lacylights:lacylights /opt/lacylights/frontend-src
-    echo "[INFO] Created /opt/lacylights/frontend-src (owned by lacylights)"
+    sudo chown -R pi:pi /opt/lacylights/frontend-src
+    echo "[INFO] Created /opt/lacylights/frontend-src (owned by pi)"
 else
     # Ensure proper ownership even if directory exists
-    sudo chown -R lacylights:lacylights /opt/lacylights/frontend-src
+    sudo chown -R pi:pi /opt/lacylights/frontend-src
     echo "[INFO] Frontend source directory exists (ownership verified)"
 fi
 
@@ -483,10 +483,10 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         --exclude '__tests__' \
         ./ "$PI_HOST:$FRONTEND_REMOTE/"
 
-    # Ensure frontend directory is owned by lacylights
+    # Ensure frontend directory is owned by pi (matches service user)
     # This is necessary because rsync preserves Mac ownership
     print_info "Setting frontend permissions..."
-    ssh "$PI_HOST" "sudo chown -R lacylights:lacylights $FRONTEND_REMOTE"
+    ssh "$PI_HOST" "sudo chown -R pi:pi $FRONTEND_REMOTE"
 
     print_success "Frontend code and build artifacts synced"
 fi
