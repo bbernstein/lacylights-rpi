@@ -799,10 +799,13 @@ except Exception as e:
         local frontend_dir="$LACYLIGHTS_ROOT/frontend-src"
         if [ -d "$frontend_dir" ]; then
             print_status "Deploying frontend to frontend-src directory..."
+            # Ensure directory is owned by lacylights for the copy operation
+            sudo chown -R lacylights:lacylights "$frontend_dir"
             # Remove old files including old node_modules (dependencies may have changed)
             rm -rf "$frontend_dir"/*
             # Copy new files from repos to frontend-src
             if cp -r "$repo_dir"/* "$frontend_dir/"; then
+                # Change ownership to pi:pi for npm operations
                 sudo chown -R pi:pi "$frontend_dir"
                 print_success "Frontend files deployed to $frontend_dir"
 
