@@ -710,6 +710,19 @@ except Exception as e:
                     sleep 1
                     wait_count=$((wait_count + 1))
                 done
+                # Verify process actually terminated
+                if pgrep -f lacylights-server >/dev/null 2>&1; then
+                    print_error "lacylights-server process failed to terminate after 8 seconds"
+                    print_status "Attempting to force kill..."
+                    sudo pkill -9 -f lacylights-server
+                    sleep 1
+                    if pgrep -f lacylights-server >/dev/null 2>&1; then
+                        print_error "Failed to kill lacylights-server process. Aborting update."
+                        rm -rf "$temp_dir" "$temp_backup"
+                        return 1
+                    fi
+                    print_success "Process forcefully terminated"
+                fi
             fi
             ;;
         lacylights-fe)
@@ -733,6 +746,19 @@ except Exception as e:
                     sleep 1
                     wait_count=$((wait_count + 1))
                 done
+                # Verify process actually terminated
+                if pgrep -f lacylights-server >/dev/null 2>&1; then
+                    print_error "lacylights-server process failed to terminate after 8 seconds"
+                    print_status "Attempting to force kill..."
+                    sudo pkill -9 -f lacylights-server
+                    sleep 1
+                    if pgrep -f lacylights-server >/dev/null 2>&1; then
+                        print_error "Failed to kill lacylights-server process. Aborting update."
+                        rm -rf "$temp_dir" "$temp_backup"
+                        return 1
+                    fi
+                    print_success "Process forcefully terminated"
+                fi
             fi
             ;;
     esac
