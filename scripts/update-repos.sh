@@ -811,7 +811,7 @@ except Exception as e:
                 pushd "$frontend_dir" >/dev/null
                 # Use npm cache directory to avoid EACCES errors
                 local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
-                mkdir -p "$npm_cache"
+                sudo mkdir -p "$npm_cache"
                 sudo chown -R pi:pi "$npm_cache"
 
                 # Try npm ci first (faster and more reliable), fall back to npm install
@@ -851,7 +851,7 @@ except Exception as e:
                 pushd "$frontend_dir" >/dev/null
                 # Use npm cache directory to avoid EACCES errors
                 local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
-                mkdir -p "$npm_cache"
+                sudo mkdir -p "$npm_cache"
                 sudo chown -R pi:pi "$npm_cache"
 
                 # Try npm ci first (faster and more reliable), fall back to npm install
