@@ -506,7 +506,36 @@ update_repo() {
     local download_url
     local expected_sha256
 
+    # Check if metadata has platforms array (multi-platform) or direct url/sha256 (single-platform)
+    local has_platforms=false
     if command_exists jq; then
+        if jq -e '.platforms' "$metadata_file" > /dev/null 2>&1; then
+            has_platforms=true
+        fi
+    elif command_exists python3; then
+        if python3 -c "import json; f=open('$metadata_file'); d=json.load(f); exit(0 if 'platforms' in d else 1)" 2>/dev/null; then
+            has_platforms=true
+        fi
+    fi
+
+    # Handle platform-independent releases (e.g., static frontend)
+    if [ "$has_platforms" = false ]; then
+        print_status "Using platform-independent release"
+        if command_exists jq; then
+            download_url=$(jq -r '.url // empty' "$metadata_file")
+            expected_sha256=$(jq -r '.sha256 // empty' "$metadata_file")
+        elif command_exists python3; then
+            local python_result
+            python_result=$(python3 -c "
+import json
+with open('$metadata_file') as f:
+    d = json.load(f)
+print(d.get('url', '') + '|' + d.get('sha256', ''))
+" 2>/dev/null)
+            download_url="${python_result%%|*}"
+            expected_sha256="${python_result##*|}"
+        fi
+    elif command_exists jq; then
         # Use jq to select the correct platform from the platforms array
         # First, check how many matches we have to detect data quality issues
         local matches

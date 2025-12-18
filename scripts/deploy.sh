@@ -251,14 +251,14 @@ else
     echo "[INFO] Backend directory exists"
 fi
 
-# Frontend source directory (owned by pi for npm operations)
+# Frontend source directory (owned by lacylights for version management updates)
 if [ ! -d "/opt/lacylights/frontend-src" ]; then
     sudo mkdir -p /opt/lacylights/frontend-src
-    sudo chown -R pi:pi /opt/lacylights/frontend-src
-    echo "[INFO] Created /opt/lacylights/frontend-src (owned by pi)"
+    sudo chown -R lacylights:lacylights /opt/lacylights/frontend-src
+    echo "[INFO] Created /opt/lacylights/frontend-src (owned by lacylights)"
 else
     # Ensure proper ownership even if directory exists
-    sudo chown -R pi:pi /opt/lacylights/frontend-src
+    sudo chown -R lacylights:lacylights /opt/lacylights/frontend-src
     echo "[INFO] Frontend source directory exists (ownership verified)"
 fi
 
@@ -282,6 +282,17 @@ else
     # Ensure proper ownership even if directory exists
     sudo chown -R lacylights:lacylights /opt/lacylights/logs
     echo "[INFO] Logs directory exists (ownership verified)"
+fi
+
+# Backups directory (owned by lacylights for version management rollbacks)
+if [ ! -d "/opt/lacylights/backups" ]; then
+    sudo mkdir -p /opt/lacylights/backups
+    sudo chown -R lacylights:lacylights /opt/lacylights/backups
+    echo "[INFO] Created /opt/lacylights/backups (owned by lacylights)"
+else
+    # Ensure proper ownership even if directory exists
+    sudo chown -R lacylights:lacylights /opt/lacylights/backups
+    echo "[INFO] Backups directory exists (ownership verified)"
 fi
 
 echo "[SUCCESS] All deployment directories ready"
@@ -604,7 +615,7 @@ fi
 
 if [ "$5" = true ]; then
     echo "[INFO] Setting frontend-src version to $2"
-    echo "$2" | sudo -u pi tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
+    echo "$2" | sudo -u lacylights tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
 fi
 
 if [ "$6" = true ]; then
