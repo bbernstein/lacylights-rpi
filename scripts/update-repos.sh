@@ -815,12 +815,12 @@ except Exception as e:
                 sudo chown -R pi:pi "$npm_cache"
 
                 # Try npm ci first (faster and more reliable), fall back to npm install
-                # Set HOME to pi user's home to avoid npm trying to create /home/lacylights
-                if sudo -u pi HOME=/home/pi npm ci --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                # Run as pi user with proper environment to avoid permission issues
+                if sudo -u pi env HOME=/home/pi npm_config_cache="$npm_cache" npm ci 2>&1 | tee -a "$UPDATE_LOG"; then
                     print_success "Frontend dependencies installed via npm ci"
                 else
                     print_warning "npm ci failed, falling back to npm install..."
-                    if sudo -u pi HOME=/home/pi npm install --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                    if sudo -u pi env HOME=/home/pi npm_config_cache="$npm_cache" npm install 2>&1 | tee -a "$UPDATE_LOG"; then
                         print_success "Frontend dependencies installed via npm install"
                     else
                         print_error "Failed to install frontend dependencies"
@@ -855,12 +855,12 @@ except Exception as e:
                 sudo chown -R pi:pi "$npm_cache"
 
                 # Try npm ci first (faster and more reliable), fall back to npm install
-                # Set HOME to pi user's home to avoid npm trying to create /home/lacylights
-                if sudo -u pi HOME=/home/pi npm ci --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                # Run as pi user with proper environment to avoid permission issues
+                if sudo -u pi env HOME=/home/pi npm_config_cache="$npm_cache" npm ci 2>&1 | tee -a "$UPDATE_LOG"; then
                     print_success "Frontend dependencies installed via npm ci"
                 else
                     print_warning "npm ci failed, falling back to npm install..."
-                    if sudo -u pi HOME=/home/pi npm install --cache "$npm_cache" 2>&1 | tee -a "$UPDATE_LOG"; then
+                    if sudo -u pi env HOME=/home/pi npm_config_cache="$npm_cache" npm install 2>&1 | tee -a "$UPDATE_LOG"; then
                         print_success "Frontend dependencies installed via npm install"
                     else
                         print_error "Failed to install frontend dependencies"
