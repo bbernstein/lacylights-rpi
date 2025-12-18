@@ -627,7 +627,7 @@ fi
 
 if [ "$5" = true ]; then
     echo "[INFO] Setting frontend-src version to $2"
-    echo "$2" | sudo -u lacylights tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
+    echo "$2" | sudo -u pi tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
 fi
 
 if [ "$6" = true ]; then
