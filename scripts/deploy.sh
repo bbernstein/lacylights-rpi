@@ -467,8 +467,10 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
     print_success "Frontend type check passed"
 
     # Sync frontend to Pi (including built .next/ and out/)
+    # Use --rsync-path with sudo because /opt/lacylights/frontend-src is owned by lacylights user
     print_info "Syncing frontend code and build artifacts to Raspberry Pi..."
     rsync -avz --delete \
+        --rsync-path="sudo rsync" \
         --exclude 'node_modules' \
         --exclude '.git' \
         --exclude '.DS_Store' \
@@ -476,6 +478,11 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
         --exclude '*.log' \
         --exclude '__tests__' \
         ./ "$PI_HOST:$FRONTEND_REMOTE/"
+
+    # Ensure frontend directory is owned by lacylights
+    # This is necessary because rsync preserves Mac ownership
+    print_info "Setting frontend permissions..."
+    ssh "$PI_HOST" "sudo chown -R lacylights:lacylights $FRONTEND_REMOTE"
 
     print_success "Frontend code and build artifacts synced"
 fi
