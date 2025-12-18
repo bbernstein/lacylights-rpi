@@ -25,10 +25,11 @@ else
     UPDATE_CMD="$UPDATE_SCRIPT update $REPOSITORY"
 fi
 
-# Use systemd-run to spawn the update process outside the current service's security context
+# Use sudo systemd-run to spawn the update process outside the current service's security context
 # This bypasses the NoNewPrivileges restriction and runs with full system privileges
 # The update will run after a 3-second delay to allow the HTTP response to complete
-systemd-run --unit=lacylights-self-update \
+# Requires sudoers entry: lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update *
+sudo systemd-run --unit=lacylights-self-update \
     --description="LacyLights Self-Update to ${VERSION:-latest}" \
     --on-active=3s \
     --timer-property=AccuracySec=100ms \
