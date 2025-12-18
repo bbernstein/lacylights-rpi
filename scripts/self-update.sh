@@ -18,33 +18,21 @@ fi
 REPOSITORY="$1"
 VERSION="${2:-}"
 
-# Create a temporary script that will run in the background
-# This avoids issues with declare -f and function serialization
-TEMP_SCRIPT="/tmp/lacylights-update-$$"
-cat > "$TEMP_SCRIPT" << 'SCRIPT_EOF'
-#!/bin/bash
-# Wait a few seconds to allow the HTTP response to be sent
-sleep 3
-
-# Run the actual update
-SCRIPT_EOF
-
-# Add the update command with proper quoting
+# Build the update command
 if [ -n "$VERSION" ]; then
-    echo "\"$UPDATE_SCRIPT\" update \"$REPOSITORY\" \"$VERSION\"" >> "$TEMP_SCRIPT"
+    UPDATE_CMD="$UPDATE_SCRIPT update $REPOSITORY $VERSION"
 else
-    echo "\"$UPDATE_SCRIPT\" update \"$REPOSITORY\"" >> "$TEMP_SCRIPT"
+    UPDATE_CMD="$UPDATE_SCRIPT update $REPOSITORY"
 fi
 
-# Make it executable
-chmod +x "$TEMP_SCRIPT"
-
-# Start the update in the background, detached from this process
-# Redirect output to update log and clean up temp script when done
-nohup bash -c "$TEMP_SCRIPT >> /opt/lacylights/logs/update.log 2>&1; rm -f $TEMP_SCRIPT" &
-
-# Disown the background process so it survives this script's exit
-disown
+# Use systemd-run to spawn the update process outside the current service's security context
+# This bypasses the NoNewPrivileges restriction and runs with full system privileges
+# The update will run after a 3-second delay to allow the HTTP response to complete
+systemd-run --unit=lacylights-self-update \
+    --description="LacyLights Self-Update to ${VERSION:-latest}" \
+    --on-active=3s \
+    --timer-property=AccuracySec=100ms \
+    bash -c "$UPDATE_CMD >> /opt/lacylights/logs/update.log 2>&1"
 
 # Exit immediately so the backend can return the HTTP response
 echo "Update scheduled for $REPOSITORY${VERSION:+ to $VERSION}"
