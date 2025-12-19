@@ -277,6 +277,13 @@ restore_from_backup() {
                 sudo systemctl stop lacylights-frontend
             fi
             ;;
+        lacylights-mcp)
+            # MCP doesn't have a standalone service, but backend depends on it
+            # Stop backend so it can pick up restored MCP version
+            if systemctl is-active --quiet lacylights; then
+                sudo systemctl stop lacylights
+            fi
+            ;;
     esac
 
     # Safety check: Only allow removal if repo_dir is within /opt/lacylights/repos/
@@ -330,6 +337,10 @@ restore_from_backup() {
             ;;
         lacylights-fe)
             sudo systemctl start lacylights-frontend || true
+            ;;
+        lacylights-mcp)
+            # Restart backend to pick up restored MCP version
+            sudo systemctl start lacylights || true
             ;;
     esac
 
