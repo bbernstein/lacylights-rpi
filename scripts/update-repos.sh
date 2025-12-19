@@ -277,6 +277,13 @@ restore_from_backup() {
                 sudo systemctl stop lacylights-frontend
             fi
             ;;
+        lacylights-mcp)
+            # MCP doesn't have a standalone service, but backend depends on it
+            # Stop backend so it can pick up restored MCP version
+            if systemctl is-active --quiet lacylights; then
+                sudo systemctl stop lacylights
+            fi
+            ;;
     esac
 
     # Safety check: Only allow removal if repo_dir is within /opt/lacylights/repos/
@@ -330,6 +337,10 @@ restore_from_backup() {
             ;;
         lacylights-fe)
             sudo systemctl start lacylights-frontend || true
+            ;;
+        lacylights-mcp)
+            # Restart backend to pick up restored MCP version
+            sudo systemctl start lacylights || true
             ;;
     esac
 
@@ -958,6 +969,97 @@ except Exception as e:
             return 1
         fi
         popd >/dev/null
+    elif [ "$repo_name" = "lacylights-mcp" ]; then
+        # MCP is a Node.js package - deploy to mcp directory where backend can find it
+        print_status "Deploying MCP to mcp directory..."
+        local mcp_dir="$LACYLIGHTS_ROOT/mcp"
+
+        # Safety check: Validate mcp_dir path before removal
+        if [[ ! "$mcp_dir" =~ ^/opt/lacylights/mcp$ ]]; then
+            print_error "Invalid MCP directory path: $mcp_dir"
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
+        fi
+
+        if [ -d "$mcp_dir" ]; then
+            # Remove old files
+            print_status "Removing old MCP files..."
+            rm -rf "$mcp_dir"/*
+        else
+            print_status "Creating MCP directory..."
+            if ! sudo mkdir -p "$mcp_dir"; then
+                print_error "Failed to create MCP directory"
+                restore_from_backup "$backup_file" "$repo_name"
+                return 1
+            fi
+        fi
+
+        # Set ownership and permissions
+        sudo chown -R lacylights:lacylights "$mcp_dir"
+        sudo chmod -R g+w "$mcp_dir"
+        sudo chmod g+s "$mcp_dir"
+
+        # Copy new files from repos to mcp directory
+        if cp -r "$repo_dir"/* "$mcp_dir/"; then
+            sudo chmod -R g+w "$mcp_dir"
+            print_success "MCP files deployed to $mcp_dir"
+
+            # Install dependencies if package.json exists
+            if [ -f "$mcp_dir/package.json" ]; then
+                print_status "Installing MCP dependencies..."
+                pushd "$mcp_dir" >/dev/null
+
+                # Use npm cache directory to avoid EACCES errors
+                local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
+                sudo mkdir -p "$npm_cache"
+                sudo chown -R lacylights:lacylights "$npm_cache"
+                sudo chmod -R g+w "$npm_cache"
+                sudo chmod g+s "$npm_cache"
+
+                # Try npm ci first, fall back to npm install
+                # Note: MCP uses --production flag (unlike frontend) because it's consumed
+                # as a library by the backend and doesn't need dev dependencies
+                if [ -f "package-lock.json" ]; then
+                    npm ci --production --cache "$npm_cache" >> "$LOG_FILE" 2>&1
+                    npm_exit_code=$?
+                    if [ $npm_exit_code -eq 0 ]; then
+                        sudo chmod -R g+w "$mcp_dir/node_modules" 2>/dev/null || true
+                        print_success "MCP dependencies installed via npm ci"
+                    else
+                        print_warning "npm ci failed, falling back to npm install..."
+                        npm install --production --cache "$npm_cache" >> "$LOG_FILE" 2>&1
+                        npm_exit_code=$?
+                        if [ $npm_exit_code -eq 0 ]; then
+                            sudo chmod -R g+w "$mcp_dir/node_modules" 2>/dev/null || true
+                            print_success "MCP dependencies installed via npm install"
+                        else
+                            print_error "Failed to install MCP dependencies"
+                            popd >/dev/null
+                            restore_from_backup "$backup_file" "$repo_name"
+                            return 1
+                        fi
+                    fi
+                else
+                    npm install --production --cache "$npm_cache" >> "$LOG_FILE" 2>&1
+                    npm_exit_code=$?
+                    if [ $npm_exit_code -eq 0 ]; then
+                        sudo chmod -R g+w "$mcp_dir/node_modules" 2>/dev/null || true
+                        print_success "MCP dependencies installed"
+                    else
+                        print_error "Failed to install MCP dependencies"
+                        popd >/dev/null
+                        restore_from_backup "$backup_file" "$repo_name"
+                        return 1
+                    fi
+                fi
+
+                popd >/dev/null
+            fi
+        else
+            print_error "Failed to copy MCP files to mcp directory"
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
+        fi
     elif [ -f "$repo_dir/package.json" ]; then
         # Fix npm cache permissions before running npm commands
         fix_npm_permissions
