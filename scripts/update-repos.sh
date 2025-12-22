@@ -803,8 +803,8 @@ except Exception as e:
 
     # Install dependencies and build (skip for pre-built frontend and Go backend)
     if [ "$repo_name" = "lacylights-fe" ]; then
-        # Frontend uses pre-built static export - no build needed, but npm install required for next binary
-        print_success "Using pre-built static export for $repo_name (no build required)"
+        # Frontend requires npm install and build to create the .next directory
+        print_status "Setting up frontend for $repo_name"
 
         # Deploy frontend to frontend-src directory where the systemd service runs
         local frontend_dir="$LACYLIGHTS_ROOT/frontend-src"
@@ -855,6 +855,41 @@ except Exception as e:
                         restore_from_backup "$backup_file" "$repo_name"
                         return 1
                     fi
+                fi
+
+                # Build the frontend (creates .next directory required for Next.js)
+                print_status "Building frontend (this may take a few minutes)..."
+                # Extract version from package.json for build-time version info
+                local fe_version
+                fe_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
+                local build_time
+                build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+                # Build with version info embedded for verification
+                NEXT_PUBLIC_VERSION="$fe_version" \
+                NEXT_PUBLIC_GIT_COMMIT="local-build-${fe_version}" \
+                NEXT_PUBLIC_BUILD_TIME="$build_time" \
+                NODE_ENV=production npm run build >> "$LOG_FILE" 2>&1
+                build_exit_code=$?
+                if [ $build_exit_code -eq 0 ]; then
+                    # Validate that .next directory was created
+                    if [ -d "$frontend_dir/.next" ]; then
+                        # Ensure .next directory has correct permissions
+                        sudo chmod -R g+w "$frontend_dir/.next" 2>/dev/null || true
+                        print_success "Frontend build completed successfully (v$fe_version)"
+                    else
+                        print_error "Frontend build succeeded but .next directory was not created"
+                        print_error "Check $LOG_FILE for details"
+                        popd >/dev/null
+                        restore_from_backup "$backup_file" "$repo_name"
+                        return 1
+                    fi
+                else
+                    print_error "Frontend build failed (exit code: $build_exit_code)"
+                    print_error "Check $LOG_FILE for details"
+                    popd >/dev/null
+                    restore_from_backup "$backup_file" "$repo_name"
+                    return 1
                 fi
                 popd >/dev/null
             else
@@ -908,6 +943,41 @@ except Exception as e:
                         restore_from_backup "$backup_file" "$repo_name"
                         return 1
                     fi
+                fi
+
+                # Build the frontend (creates .next directory required for Next.js)
+                print_status "Building frontend (this may take a few minutes)..."
+                # Extract version from package.json for build-time version info
+                local fe_version_new
+                fe_version_new=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
+                local build_time_new
+                build_time_new=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+                # Build with version info embedded for verification
+                NEXT_PUBLIC_VERSION="$fe_version_new" \
+                NEXT_PUBLIC_GIT_COMMIT="local-build-${fe_version_new}" \
+                NEXT_PUBLIC_BUILD_TIME="$build_time_new" \
+                NODE_ENV=production npm run build >> "$LOG_FILE" 2>&1
+                build_exit_code=$?
+                if [ $build_exit_code -eq 0 ]; then
+                    # Validate that .next directory was created
+                    if [ -d "$frontend_dir/.next" ]; then
+                        # Ensure .next directory has correct permissions
+                        sudo chmod -R g+w "$frontend_dir/.next" 2>/dev/null || true
+                        print_success "Frontend build completed successfully (v$fe_version_new)"
+                    else
+                        print_error "Frontend build succeeded but .next directory was not created"
+                        print_error "Check $LOG_FILE for details"
+                        popd >/dev/null
+                        restore_from_backup "$backup_file" "$repo_name"
+                        return 1
+                    fi
+                else
+                    print_error "Frontend build failed (exit code: $build_exit_code)"
+                    print_error "Check $LOG_FILE for details"
+                    popd >/dev/null
+                    restore_from_backup "$backup_file" "$repo_name"
+                    return 1
                 fi
                 popd >/dev/null
             else
