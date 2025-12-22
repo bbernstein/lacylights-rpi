@@ -872,7 +872,18 @@ except Exception as e:
                 NODE_ENV=production npm run build >> "$LOG_FILE" 2>&1
                 build_exit_code=$?
                 if [ $build_exit_code -eq 0 ]; then
-                    print_success "Frontend build completed successfully (v$fe_version)"
+                    # Validate that .next directory was created
+                    if [ -d "$frontend_dir/.next" ]; then
+                        # Ensure .next directory has correct permissions
+                        sudo chmod -R g+w "$frontend_dir/.next" 2>/dev/null || true
+                        print_success "Frontend build completed successfully (v$fe_version)"
+                    else
+                        print_error "Frontend build succeeded but .next directory was not created"
+                        print_error "Check $LOG_FILE for details"
+                        popd >/dev/null
+                        restore_from_backup "$backup_file" "$repo_name"
+                        return 1
+                    fi
                 else
                     print_error "Frontend build failed (exit code: $build_exit_code)"
                     print_error "Check $LOG_FILE for details"
@@ -949,7 +960,18 @@ except Exception as e:
                 NODE_ENV=production npm run build >> "$LOG_FILE" 2>&1
                 build_exit_code=$?
                 if [ $build_exit_code -eq 0 ]; then
-                    print_success "Frontend build completed successfully (v$fe_version_new)"
+                    # Validate that .next directory was created
+                    if [ -d "$frontend_dir/.next" ]; then
+                        # Ensure .next directory has correct permissions
+                        sudo chmod -R g+w "$frontend_dir/.next" 2>/dev/null || true
+                        print_success "Frontend build completed successfully (v$fe_version_new)"
+                    else
+                        print_error "Frontend build succeeded but .next directory was not created"
+                        print_error "Check $LOG_FILE for details"
+                        popd >/dev/null
+                        restore_from_backup "$backup_file" "$repo_name"
+                        return 1
+                    fi
                 else
                     print_error "Frontend build failed (exit code: $build_exit_code)"
                     print_error "Check $LOG_FILE for details"

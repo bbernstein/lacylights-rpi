@@ -33,6 +33,12 @@ The deployment script automatically:
 
 Note: The Go backend is a pre-compiled binary - there's no build step on the Pi.
 
+**Frontend Build Note:** When updating the frontend via the update script, a full Next.js build is performed on the Raspberry Pi. This process:
+- Takes 3-5 minutes on a Pi 4 (longer on older models)
+- Creates the `.next` directory required for Next.js to run
+- Embeds version information (NEXT_PUBLIC_VERSION) for verification
+- Automatically rolls back on build failure
+
 See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
 
 ### Checking Application Version
@@ -140,11 +146,7 @@ sudo apt-get install -y nodejs
 node --version
 npm --version
 
-# Rebuild LacyLights with new Node version
-cd /opt/lacylights/backend
-npm rebuild
-npm run build
-
+# Rebuild LacyLights frontend with new Node version
 cd /opt/lacylights/frontend-src
 npm rebuild
 npm run build
