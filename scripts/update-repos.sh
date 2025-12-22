@@ -219,12 +219,18 @@ get_latest_release_version() {
 }
 
 # Function to list all available releases for a repository
-# Note: Distribution server doesn't provide a version listing API, falling back to GitHub API
+# Uses the distribution server's versions.json endpoint
 list_available_versions() {
     local repo="$1"
-    local api_url="https://api.github.com/repos/$GITHUB_ORG/$repo/releases"
+    local component
+    component=$(get_dist_component "$repo")
 
-    print_warning "Distribution server doesn't provide a version listing API, falling back to GitHub API"
+    if [ -z "$component" ]; then
+        echo "[]"
+        return
+    fi
+
+    local versions_url="$DIST_BASE_URL/$component/versions.json"
 
     if command_exists jq; then
         local response_file
@@ -233,22 +239,39 @@ list_available_versions() {
             return
         }
 
-        local http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$api_url")
+        local http_code
+        http_code=$(curl -s -w "%{http_code}" -o "$response_file" "$versions_url")
 
         # Check for 2xx success codes
         if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
             rm -f "$response_file"
+            print_warning "versions.json not available for $component, no version listing"
             echo "[]"
             return
         fi
 
-        # Extract versions and sort using semantic versioning (sort -V handles semver properly)
-        local versions=$(jq -r '.[].tag_name' "$response_file" | sort -rV | head -20)
+        # Extract versions from the versions.json array
+        # Format: [{"version": "0.8.12", "isPrerelease": false, ...}, ...]
+        # Returns versions prefixed with 'v' for consistency
+        local versions
+        versions=$(jq -r '.[] | "v" + .version' "$response_file" 2>/dev/null)
         rm -f "$response_file"
-        echo "$versions"
+
+        if [ -n "$versions" ]; then
+            echo "$versions"
+        else
+            echo "[]"
+        fi
     else
-        # Fallback without jq - also use semver sorting
-        curl -s "$api_url" | grep '"tag_name"' | cut -d '"' -f 4 | sort -rV | head -20
+        # Fallback without jq - extract version strings using grep/sed
+        local response
+        response=$(curl -s "$versions_url")
+        if [ -n "$response" ]; then
+            echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | \
+                sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/v\1/' | head -20
+        else
+            echo "[]"
+        fi
     fi
 }
 
