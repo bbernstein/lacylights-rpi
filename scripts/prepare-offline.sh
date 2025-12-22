@@ -310,12 +310,6 @@ for project in frontend mcp; do
             print_success "$project .next/ archived"
         fi
 
-        if [ -d "out" ]; then
-            # Frontend export build creates out/ directory (static files)
-            archive_with_fallback "$OUTPUT_DIR/releases/${project}-out.tar.gz" "out/"
-            print_success "$project out/ archived"
-        fi
-
         print_success "$project built and dependencies cached"
     fi
 

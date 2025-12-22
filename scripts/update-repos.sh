@@ -141,7 +141,7 @@ get_dist_component() {
     local repo="$1"
     case "$repo" in
         lacylights-go) echo "go" ;;
-        lacylights-fe) echo "fe-static" ;;  # RPi uses static build
+        lacylights-fe) echo "fe-server" ;;  # RPi uses server build with pre-built .next
         lacylights-mcp) echo "mcp" ;;
         *) echo "" ;;
     esac
@@ -801,190 +801,62 @@ except Exception as e:
 
     print_success "$repo_name extracted to $repo_dir"
 
-    # Install dependencies and build (skip for pre-built frontend and Go backend)
+    # Deploy pre-built releases to their service directories
     if [ "$repo_name" = "lacylights-fe" ]; then
-        # Frontend requires npm install and build to create the .next directory
-        print_status "Setting up frontend for $repo_name"
+        # Frontend is pre-built with .next and node_modules included - just deploy
+        print_status "Deploying pre-built frontend for $repo_name"
 
         # Deploy frontend to frontend-src directory where the systemd service runs
         local frontend_dir="$LACYLIGHTS_ROOT/frontend-src"
-        if [ -d "$frontend_dir" ]; then
-            print_status "Deploying frontend to frontend-src directory..."
-            # Ensure directory has proper group ownership and permissions
-            # (Both pi and lacylights users can write via shared group)
-            sudo chown -R lacylights:lacylights "$frontend_dir"
-            sudo chmod -R g+w "$frontend_dir"
-            sudo chmod g+s "$frontend_dir"
-            # Remove old files including old node_modules (dependencies may have changed)
-            rm -rf "$frontend_dir"/*
-            # Copy new files from repos to frontend-src
-            if cp -r "$repo_dir"/* "$frontend_dir/"; then
-                # Ensure new files have group write permissions
-                sudo chmod -R g+w "$frontend_dir"
-                print_success "Frontend files deployed to $frontend_dir"
 
-                # Install dependencies (required for npm start to work)
-                print_status "Installing frontend dependencies..."
-                pushd "$frontend_dir" >/dev/null
-                # Use npm cache directory to avoid EACCES errors
-                local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
-                sudo mkdir -p "$npm_cache"
-                sudo chown -R lacylights:lacylights "$npm_cache"
-                sudo chmod -R g+w "$npm_cache"
-                sudo chmod g+s "$npm_cache"
-
-                # Try npm ci first (faster and more reliable), fall back to npm install
-                # Both pi and lacylights users can run npm due to shared group ownership
-                npm ci --cache "$npm_cache" >> "$LOG_FILE" 2>&1
-                npm_exit_code=$?
-                if [ $npm_exit_code -eq 0 ]; then
-                    # Ensure node_modules has group write permissions (npm creates with 755)
-                    sudo chmod -R g+w "$frontend_dir/node_modules" 2>/dev/null || true
-                    print_success "Frontend dependencies installed via npm ci"
-                else
-                    print_warning "npm ci failed, falling back to npm install..."
-                    npm install --cache "$npm_cache" >> "$LOG_FILE" 2>&1
-                    npm_exit_code=$?
-                    if [ $npm_exit_code -eq 0 ]; then
-                        # Ensure node_modules has group write permissions (npm creates with 755)
-                        sudo chmod -R g+w "$frontend_dir/node_modules" 2>/dev/null || true
-                        print_success "Frontend dependencies installed via npm install"
-                    else
-                        print_error "Failed to install frontend dependencies"
-                        popd >/dev/null
-                        restore_from_backup "$backup_file" "$repo_name"
-                        return 1
-                    fi
-                fi
-
-                # Build the frontend (creates .next directory required for Next.js)
-                print_status "Building frontend (this may take a few minutes)..."
-                # Extract version from package.json for build-time version info
-                local fe_version
-                fe_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
-                local build_time
-                build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-                # Build with version info embedded for verification
-                NEXT_PUBLIC_VERSION="$fe_version" \
-                NEXT_PUBLIC_GIT_COMMIT="local-build-${fe_version}" \
-                NEXT_PUBLIC_BUILD_TIME="$build_time" \
-                NODE_ENV=production npm run build >> "$LOG_FILE" 2>&1
-                build_exit_code=$?
-                if [ $build_exit_code -eq 0 ]; then
-                    # Validate that .next directory was created
-                    if [ -d "$frontend_dir/.next" ]; then
-                        # Ensure .next directory has correct permissions
-                        sudo chmod -R g+w "$frontend_dir/.next" 2>/dev/null || true
-                        print_success "Frontend build completed successfully (v$fe_version)"
-                    else
-                        print_error "Frontend build succeeded but .next directory was not created"
-                        print_error "Check $LOG_FILE for details"
-                        popd >/dev/null
-                        restore_from_backup "$backup_file" "$repo_name"
-                        return 1
-                    fi
-                else
-                    print_error "Frontend build failed (exit code: $build_exit_code)"
-                    print_error "Check $LOG_FILE for details"
-                    popd >/dev/null
-                    restore_from_backup "$backup_file" "$repo_name"
-                    return 1
-                fi
-                popd >/dev/null
-            else
-                print_error "Failed to copy frontend to frontend-src directory"
-                restore_from_backup "$backup_file" "$repo_name"
-                return 1
-            fi
-        else
-            print_warning "Frontend directory $frontend_dir not found, creating it..."
+        # Create directory if it doesn't exist
+        if [ ! -d "$frontend_dir" ]; then
+            print_status "Creating frontend directory..."
             if ! sudo mkdir -p "$frontend_dir"; then
                 print_error "Failed to create frontend directory"
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
-            sudo chown -R lacylights:lacylights "$frontend_dir"
+        fi
+
+        print_status "Deploying frontend to frontend-src directory..."
+        # Ensure directory has proper group ownership and permissions
+        sudo chown -R lacylights:lacylights "$frontend_dir"
+        sudo chmod -R g+w "$frontend_dir"
+        sudo chmod g+s "$frontend_dir"
+
+        # Remove old files (fe-server archive includes node_modules and .next)
+        rm -rf "$frontend_dir"/*
+
+        # Copy new files from repos to frontend-src
+        if cp -r "$repo_dir"/* "$frontend_dir/"; then
+            # Ensure new files have group write permissions
             sudo chmod -R g+w "$frontend_dir"
-            sudo chmod g+s "$frontend_dir"
-            if cp -r "$repo_dir"/* "$frontend_dir/"; then
-                sudo chmod -R g+w "$frontend_dir"
-                print_success "Frontend files deployed to $frontend_dir"
 
-                # Install dependencies (required for npm start to work)
-                print_status "Installing frontend dependencies..."
-                pushd "$frontend_dir" >/dev/null
-                # Use npm cache directory to avoid EACCES errors
-                local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
-                sudo mkdir -p "$npm_cache"
-                sudo chown -R lacylights:lacylights "$npm_cache"
-                sudo chmod -R g+w "$npm_cache"
-                sudo chmod g+s "$npm_cache"
-
-                # Try npm ci first (faster and more reliable), fall back to npm install
-                # Both pi and lacylights users can run npm due to shared group ownership
-                npm ci --cache "$npm_cache" >> "$LOG_FILE" 2>&1
-                npm_exit_code=$?
-                if [ $npm_exit_code -eq 0 ]; then
-                    # Ensure node_modules has group write permissions (npm creates with 755)
-                    sudo chmod -R g+w "$frontend_dir/node_modules" 2>/dev/null || true
-                    print_success "Frontend dependencies installed via npm ci"
-                else
-                    print_warning "npm ci failed, falling back to npm install..."
-                    npm install --cache "$npm_cache" >> "$LOG_FILE" 2>&1
-                    npm_exit_code=$?
-                    if [ $npm_exit_code -eq 0 ]; then
-                        # Ensure node_modules has group write permissions (npm creates with 755)
-                        sudo chmod -R g+w "$frontend_dir/node_modules" 2>/dev/null || true
-                        print_success "Frontend dependencies installed via npm install"
-                    else
-                        print_error "Failed to install frontend dependencies"
-                        popd >/dev/null
-                        restore_from_backup "$backup_file" "$repo_name"
-                        return 1
-                    fi
-                fi
-
-                # Build the frontend (creates .next directory required for Next.js)
-                print_status "Building frontend (this may take a few minutes)..."
-                # Extract version from package.json for build-time version info
-                local fe_version_new
-                fe_version_new=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
-                local build_time_new
-                build_time_new=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
-                # Build with version info embedded for verification
-                NEXT_PUBLIC_VERSION="$fe_version_new" \
-                NEXT_PUBLIC_GIT_COMMIT="local-build-${fe_version_new}" \
-                NEXT_PUBLIC_BUILD_TIME="$build_time_new" \
-                NODE_ENV=production npm run build >> "$LOG_FILE" 2>&1
-                build_exit_code=$?
-                if [ $build_exit_code -eq 0 ]; then
-                    # Validate that .next directory was created
-                    if [ -d "$frontend_dir/.next" ]; then
-                        # Ensure .next directory has correct permissions
-                        sudo chmod -R g+w "$frontend_dir/.next" 2>/dev/null || true
-                        print_success "Frontend build completed successfully (v$fe_version_new)"
-                    else
-                        print_error "Frontend build succeeded but .next directory was not created"
-                        print_error "Check $LOG_FILE for details"
-                        popd >/dev/null
-                        restore_from_backup "$backup_file" "$repo_name"
-                        return 1
-                    fi
-                else
-                    print_error "Frontend build failed (exit code: $build_exit_code)"
-                    print_error "Check $LOG_FILE for details"
-                    popd >/dev/null
-                    restore_from_backup "$backup_file" "$repo_name"
-                    return 1
-                fi
-                popd >/dev/null
+            # Validate that .next directory exists (should be in the archive)
+            if [ -d "$frontend_dir/.next" ]; then
+                # Extract version from package.json
+                local fe_version
+                fe_version=$(node -p "require('$frontend_dir/package.json').version" 2>/dev/null || echo "unknown")
+                print_success "Frontend deployed to $frontend_dir (v$fe_version)"
             else
-                print_error "Failed to copy frontend to frontend-src directory"
+                print_error "Frontend archive missing .next directory - invalid release"
+                print_error "The fe-server release should include a pre-built .next directory"
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
+
+            # Validate that node_modules exists (should be in the archive)
+            if [ ! -d "$frontend_dir/node_modules" ]; then
+                print_error "Frontend archive missing node_modules directory - invalid release"
+                print_error "The fe-server release should include node_modules"
+                restore_from_backup "$backup_file" "$repo_name"
+                return 1
+            fi
+        else
+            print_error "Failed to copy frontend to frontend-src directory"
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
         fi
     elif [ "$repo_name" = "lacylights-go" ]; then
         # Go backend is a pre-built binary - set up and deploy to backend directory

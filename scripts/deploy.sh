@@ -392,8 +392,8 @@ if [ "$SKIP_LOCAL_BUILD" = false ]; then
             npm install
         fi
 
-        # Build with NODE_ENV=production for static export
-        print_info "Building Next.js app with static export..."
+        # Build with NODE_ENV=production for server mode
+        print_info "Building Next.js app..."
         NODE_ENV=production npm run build
 
         if [ $? -eq 0 ]; then
@@ -533,7 +533,7 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
     fi
     print_success "Frontend type check passed"
 
-    # Sync frontend to Pi (including built .next/ and out/)
+    # Sync frontend to Pi (including built .next/)
     # Use --rsync-path with sudo because /opt/lacylights/frontend-src is owned by lacylights user
     print_info "Syncing frontend code and build artifacts to Raspberry Pi..."
     rsync -avz --delete \
