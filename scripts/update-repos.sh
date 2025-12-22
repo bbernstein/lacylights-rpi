@@ -263,12 +263,17 @@ list_available_versions() {
             echo "[]"
         fi
     else
-        # Fallback without jq - extract version strings using grep/sed
-        local response
-        response=$(curl -s "$versions_url")
-        if [ -n "$response" ]; then
-            echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | \
-                sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/v\1/' | head -20
+        # Fallback without jq - extract version strings using grep/sed with HTTP status checking
+        local http_code=$(curl -s -w "%{http_code}" -o /dev/null "$versions_url" 2>/dev/null)
+        if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            local response
+            response=$(curl -s "$versions_url")
+            if [ -n "$response" ]; then
+                echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | \
+                    sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/v\1/' | head -20
+            else
+                echo "[]"
+            fi
         else
             echo "[]"
         fi
@@ -857,12 +862,7 @@ except Exception as e:
             sudo chmod -R g+w "$frontend_dir"
 
             # Validate that .next directory exists (should be in the archive)
-            if [ -d "$frontend_dir/.next" ]; then
-                # Extract version from package.json
-                local fe_version
-                fe_version=$(node -p "require('$frontend_dir/package.json').version" 2>/dev/null || echo "unknown")
-                print_success "Frontend deployed to $frontend_dir (v$fe_version)"
-            else
+            if [ ! -d "$frontend_dir/.next" ]; then
                 print_error "Frontend archive missing .next directory - invalid release"
                 print_error "The fe-server release should include a pre-built .next directory"
                 restore_from_backup "$backup_file" "$repo_name"
@@ -876,6 +876,19 @@ except Exception as e:
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
+
+            # Extract version from package.json with proper error handling
+            local fe_version="unknown"
+            if [ -f "$frontend_dir/package.json" ]; then
+                if ! fe_version=$(node -p "require('$frontend_dir/package.json').version" 2>/dev/null); then
+                    print_warning "Unable to determine frontend version from package.json"
+                    fe_version="unknown"
+                fi
+            else
+                print_warning "package.json not found in $frontend_dir; frontend version unknown"
+            fi
+
+            print_success "Frontend deployed to $frontend_dir (v$fe_version)"
         else
             print_error "Failed to copy frontend to frontend-src directory"
             restore_from_backup "$backup_file" "$repo_name"
