@@ -601,10 +601,11 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         "$LOCAL_DIR/scripts/update-repos.sh" \
         "$LOCAL_DIR/scripts/update-repos-wrapper.sh" \
         "$LOCAL_DIR/scripts/self-update.sh" \
+        "$LOCAL_DIR/scripts/run-update.sh" \
         "$PI_HOST:/opt/lacylights/scripts/"
 
     # Set permissions
-    ssh "$PI_HOST" "sudo chmod +x /opt/lacylights/scripts/update-repos.sh /opt/lacylights/scripts/update-repos-wrapper.sh /opt/lacylights/scripts/self-update.sh && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
+    ssh "$PI_HOST" "sudo chmod +x /opt/lacylights/scripts/update-repos.sh /opt/lacylights/scripts/update-repos-wrapper.sh /opt/lacylights/scripts/self-update.sh /opt/lacylights/scripts/run-update.sh && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
 
     print_success "Update scripts deployed"
 fi
