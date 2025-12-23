@@ -855,8 +855,8 @@ except Exception as e:
 
         # Remove old files (fe-server archive includes node_modules and .next)
         # Note: Use find instead of glob to ensure hidden files/dirs are also removed
-        # Safety check before removing contents
-        if [ -z "$frontend_dir" ] || [ "$frontend_dir" = "/" ]; then
+        # Safety check: Only allow deletion if frontend_dir is within /opt/lacylights/
+        if [[ ! "$frontend_dir" =~ ^/opt/lacylights/ ]] || [ "$frontend_dir" = "/" ] || [ -z "$frontend_dir" ]; then
             print_error "Invalid frontend directory path: $frontend_dir"
             restore_from_backup "$backup_file" "$repo_name"
             return 1
