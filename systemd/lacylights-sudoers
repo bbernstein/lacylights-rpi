@@ -2,9 +2,14 @@
 # This is needed because the lacylights service has NoNewPrivileges=true
 # Also allow systemctl commands needed by update-repos.sh script
 # Place this file in /etc/sudoers.d/lacylights
-# Note: Commands are restricted to specific update scripts to prevent privilege escalation
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update /usr/local/bin/lacylights-self-update
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-mcp-update /usr/local/bin/lacylights-mcp-update
+#
+# Unit names include timestamps for uniqueness (e.g., lacylights-self-update-20231223-123456)
+# The wildcards allow:
+#   - Unit names with any timestamp suffix (--unit=lacylights-self-update*)
+#   - Additional systemd-run arguments (--description, --on-active, etc.)
+#   - /bin/bash -c with the update command
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update* *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-mcp-update* *
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights
