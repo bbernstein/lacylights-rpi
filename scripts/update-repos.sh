@@ -854,10 +854,12 @@ except Exception as e:
         sudo chmod g+s "$frontend_dir"
 
         # Remove old files (fe-server archive includes node_modules and .next)
-        rm -rf "$frontend_dir"/*
+        # Note: Use find instead of glob to ensure hidden files/dirs are also removed
+        find "$frontend_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
         # Copy new files from repos to frontend-src
-        if cp -r "$repo_dir"/* "$frontend_dir/"; then
+        # Note: Use /. to copy all contents including hidden files/directories
+        if cp -r "$repo_dir"/. "$frontend_dir/"; then
             # Ensure new files have group write permissions
             sudo chmod -R g+w "$frontend_dir"
 
