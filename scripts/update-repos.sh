@@ -855,7 +855,17 @@ except Exception as e:
 
         # Remove old files (fe-server archive includes node_modules and .next)
         # Note: Use find instead of glob to ensure hidden files/dirs are also removed
-        find "$frontend_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        # Safety check before removing contents
+        if [ -z "$frontend_dir" ] || [ "$frontend_dir" = "/" ]; then
+            print_error "Invalid frontend directory path: $frontend_dir"
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
+        fi
+        if ! find "$frontend_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; then
+            print_error "Failed to remove old frontend files"
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
+        fi
 
         # Copy new files from repos to frontend-src
         # Note: Use /. to copy all contents including hidden files/directories
