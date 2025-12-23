@@ -854,10 +854,22 @@ except Exception as e:
         sudo chmod g+s "$frontend_dir"
 
         # Remove old files (fe-server archive includes node_modules and .next)
-        rm -rf "$frontend_dir"/*
+        # Note: Use find instead of glob to ensure hidden files/dirs are also removed
+        # Safety check: Only allow deletion if frontend_dir is within /opt/lacylights/
+        if [[ ! "$frontend_dir" =~ ^/opt/lacylights/ ]] || [ "$frontend_dir" = "/" ] || [ -z "$frontend_dir" ]; then
+            print_error "Invalid frontend directory path: $frontend_dir"
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
+        fi
+        if ! find "$frontend_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; then
+            print_error "Failed to remove old frontend files"
+            restore_from_backup "$backup_file" "$repo_name"
+            return 1
+        fi
 
         # Copy new files from repos to frontend-src
-        if cp -r "$repo_dir"/* "$frontend_dir/"; then
+        # Note: Use /. to copy all contents including hidden files/directories
+        if cp -r "$repo_dir"/. "$frontend_dir/"; then
             # Ensure new files have group write permissions
             sudo chmod -R g+w "$frontend_dir"
 
