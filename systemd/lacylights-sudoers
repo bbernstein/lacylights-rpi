@@ -3,13 +3,14 @@
 # Also allow systemctl commands needed by update-repos.sh script
 # Place this file in /etc/sudoers.d/lacylights
 #
-# Unit names include timestamps for uniqueness (e.g., lacylights-self-update-20231223-123456)
-# The wildcards allow:
-#   - Unit names with any timestamp suffix (--unit=lacylights-self-update*)
-#   - Additional systemd-run arguments (--description, --on-active, etc.)
-#   - /bin/bash -c with the update command
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update* *
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-mcp-update* *
+# Security: These entries use specific patterns to prevent privilege escalation:
+#   - Fixed unit names (no arbitrary suffixes)
+#   - Fixed timing arguments (--on-active=3s, --timer-property=AccuracySec=100ms)
+#   - Only allows the validated run-update.sh script (not arbitrary commands)
+#   - Wildcard only for --description (user-visible text) and script arguments
+#   - The run-update.sh script validates repository names and version formats
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update --description=* --on-active=3s --timer-property=AccuracySec=100ms /opt/lacylights/scripts/run-update.sh *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-mcp-update --description=* --on-active=3s --timer-property=AccuracySec=100ms /opt/lacylights/scripts/run-update.sh *
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights
