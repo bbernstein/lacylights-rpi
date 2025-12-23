@@ -615,13 +615,14 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         "${RSYNC_SOURCES[@]}" \
         "$PI_HOST:/opt/lacylights/scripts/"
 
-    # Build chmod targets from the array
+    # Build chmod targets from the array (quoted for safety)
     CHMOD_TARGETS=""
     for script in "${UPDATE_SCRIPTS[@]}"; do
-        CHMOD_TARGETS+="/opt/lacylights/scripts/$script "
+        CHMOD_TARGETS+="'/opt/lacylights/scripts/$script' "
     done
 
-    # Set permissions
+    # Set permissions (CHMOD_TARGETS intentionally unquoted for word-splitting on remote)
+    # shellcheck disable=SC2086
     ssh "$PI_HOST" "sudo chmod +x $CHMOD_TARGETS && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
 
     print_success "Update scripts deployed"
