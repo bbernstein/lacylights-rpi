@@ -592,20 +592,37 @@ fi
 if [ "$DEPLOY_BACKEND" = true ]; then
     print_header "Deploying Update Scripts"
 
+    # Define update scripts in one place to avoid duplication (DRY principle)
+    UPDATE_SCRIPTS=(
+        "update-repos.sh"
+        "update-repos-wrapper.sh"
+        "self-update.sh"
+        "run-update.sh"
+    )
+
     print_info "Copying update scripts to Raspberry Pi..."
     ssh "$PI_HOST" "sudo mkdir -p /opt/lacylights/scripts && sudo chown lacylights:lacylights /opt/lacylights/scripts"
+
+    # Build rsync source arguments from the array
+    RSYNC_SOURCES=()
+    for script in "${UPDATE_SCRIPTS[@]}"; do
+        RSYNC_SOURCES+=("$LOCAL_DIR/scripts/$script")
+    done
 
     # Copy update scripts
     rsync -avz \
         --rsync-path="sudo rsync" \
-        "$LOCAL_DIR/scripts/update-repos.sh" \
-        "$LOCAL_DIR/scripts/update-repos-wrapper.sh" \
-        "$LOCAL_DIR/scripts/self-update.sh" \
-        "$LOCAL_DIR/scripts/run-update.sh" \
+        "${RSYNC_SOURCES[@]}" \
         "$PI_HOST:/opt/lacylights/scripts/"
 
+    # Build chmod targets from the array
+    CHMOD_TARGETS=""
+    for script in "${UPDATE_SCRIPTS[@]}"; do
+        CHMOD_TARGETS+="/opt/lacylights/scripts/$script "
+    done
+
     # Set permissions
-    ssh "$PI_HOST" "sudo chmod +x /opt/lacylights/scripts/update-repos.sh /opt/lacylights/scripts/update-repos-wrapper.sh /opt/lacylights/scripts/self-update.sh /opt/lacylights/scripts/run-update.sh && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
+    ssh "$PI_HOST" "sudo chmod +x $CHMOD_TARGETS && sudo chown lacylights:lacylights /opt/lacylights/scripts/*"
 
     print_success "Update scripts deployed"
 fi
