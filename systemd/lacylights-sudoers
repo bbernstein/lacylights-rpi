@@ -2,9 +2,15 @@
 # This is needed because the lacylights service has NoNewPrivileges=true
 # Also allow systemctl commands needed by update-repos.sh script
 # Place this file in /etc/sudoers.d/lacylights
-# Note: Commands are restricted to specific update scripts to prevent privilege escalation
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update /usr/local/bin/lacylights-self-update
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-mcp-update /usr/local/bin/lacylights-mcp-update
+#
+# Security: These entries use specific patterns to prevent privilege escalation:
+#   - Fixed unit names (no arbitrary suffixes)
+#   - Fixed timing arguments (--on-active=3s, --timer-property=AccuracySec=100ms)
+#   - Only allows the validated run-update.sh script (not arbitrary commands)
+#   - Wildcard only for --description (user-visible text) and script arguments
+#   - The run-update.sh script validates repository names and version formats
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update --description=* --on-active=3s --timer-property=AccuracySec=100ms /opt/lacylights/scripts/run-update.sh *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-mcp-update --description=* --on-active=3s --timer-property=AccuracySec=100ms /opt/lacylights/scripts/run-update.sh *
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights
