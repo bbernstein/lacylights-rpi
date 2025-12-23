@@ -13,6 +13,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPDATE_SCRIPT="$SCRIPT_DIR/update-repos.sh"
 LOG_FILE="/opt/lacylights/logs/update.log"
 
+# Verify update script exists before proceeding
+if [ ! -x "$UPDATE_SCRIPT" ]; then
+    echo "ERROR: Update script not found or not executable: $UPDATE_SCRIPT" >&2
+    exit 1
+fi
+
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
