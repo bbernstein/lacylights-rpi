@@ -981,16 +981,6 @@ else
     echo "[WARNING] frontend-next.tar.gz not found in bundle"
 fi
 
-if [ -f releases/frontend-out.tar.gz ]; then
-    echo "[INFO] Extracting frontend static export..."
-    if ! extract_with_progress "releases/frontend-out.tar.gz" "/opt/lacylights/frontend-src" "Frontend out/" 0; then
-        echo "[ERROR] Failed to extract frontend out/"
-        exit 1
-    fi
-else
-    echo "[WARNING] frontend-out.tar.gz not found in bundle"
-fi
-
 if [ -f releases/mcp-dist.tar.gz ]; then
     echo "[INFO] Extracting MCP build artifacts..."
     if ! extract_with_progress "releases/mcp-dist.tar.gz" "/opt/lacylights/mcp" "MCP dist/" 0; then

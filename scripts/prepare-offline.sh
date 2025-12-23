@@ -288,7 +288,9 @@ for project in frontend mcp; do
         npm install --cache "$OUTPUT_DIR/npm-cache" --prefer-offline
 
         print_info "Building $project..."
-        # Build with NODE_ENV=production for proper production builds (frontend export)
+        # Build with NODE_ENV=production for proper production builds
+        # Frontend: creates .next/ directory for server-side rendering
+        # MCP: creates dist/ directory for distribution
         NODE_ENV=production npm run build
 
         print_info "Creating clean package cache for $project..."
@@ -308,12 +310,6 @@ for project in frontend mcp; do
             # Frontend uses .next/
             archive_with_fallback "$OUTPUT_DIR/releases/${project}-next.tar.gz" ".next/"
             print_success "$project .next/ archived"
-        fi
-
-        if [ -d "out" ]; then
-            # Frontend export build creates out/ directory (static files)
-            archive_with_fallback "$OUTPUT_DIR/releases/${project}-out.tar.gz" "out/"
-            print_success "$project out/ archived"
         fi
 
         print_success "$project built and dependencies cached"
