@@ -501,6 +501,10 @@ if [ -z "$OFFLINE_BUNDLE" ]; then
     print_header "Step 8: Downloading Releases from GitHub"
     print_info "Downloading LacyLights release archives from GitHub..."
 
+    # Stop services if running (binary can't be overwritten while in use)
+    print_info "Stopping services if running..."
+    ssh "$PI_HOST" "sudo systemctl stop lacylights lacylights-frontend 2>/dev/null || true"
+
     # Ensure directories exist and pi user can write during setup
     print_info "Preparing directories for downloads..."
     ssh "$PI_HOST" << 'DIRSETUP'
@@ -644,6 +648,10 @@ else
     # OFFLINE MODE: Extract from bundle
     print_header "Step 8: Extracting from Offline Bundle"
     print_info "Using offline bundle (no internet access required)..."
+
+    # Stop services if running (binary can't be overwritten while in use)
+    print_info "Stopping services if running..."
+    ssh "$PI_HOST" "sudo systemctl stop lacylights lacylights-frontend 2>/dev/null || true"
 
     # Transfer bundle to Pi
     print_info "Transferring offline bundle to Pi..."
