@@ -332,9 +332,12 @@ if [ -n "$OFFLINE_BUNDLE" ]; then
 fi
 
 # Determine if WiFi setup is needed
+# WiFi is only needed if we don't have internet and need to install packages
 WIFI_NEEDED=false
-if [ "$HAS_NODEJS" = "no" ] || [ "$HAS_INTERNET" = "no" ] || [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ]; then
-    WIFI_NEEDED=true
+if [ "$HAS_INTERNET" = "no" ]; then
+    if [ "$HAS_NODEJS" = "no" ] || [ "$HAS_NPM" = "no" ] || [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ]; then
+        WIFI_NEEDED=true
+    fi
 fi
 
 # WiFi Configuration
@@ -348,7 +351,11 @@ if [ "$SKIP_WIFI" = false ] || [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ]; then
             print_info ""
         fi
     else
-        print_info "No WiFi configuration needed - all requirements met"
+        if [ "$HAS_INTERNET" = "yes" ]; then
+            print_info "Internet access available - will install missing packages in next step"
+        else
+            print_info "No WiFi configuration needed - all requirements met"
+        fi
     fi
 
     if [ "$WIFI_NEEDED" = true ]; then
