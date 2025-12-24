@@ -31,13 +31,13 @@ print_header() {
     echo -e "${BLUE}========================================${NC}"
 }
 
-print_header "LacyLights Go Backend Service Installation"
+print_header "LacyLights Service Installation"
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
-# Install systemd service file (using Go backend service)
+# Install backend systemd service file
 print_info "Installing Go backend systemd service file..."
 
 if [ -f "$REPO_DIR/systemd/lacylights.service" ]; then
@@ -46,6 +46,18 @@ if [ -f "$REPO_DIR/systemd/lacylights.service" ]; then
     print_success "Go backend service file installed"
 else
     print_error "Service file not found at $REPO_DIR/systemd/lacylights.service"
+    exit 1
+fi
+
+# Install frontend systemd service file
+print_info "Installing frontend systemd service file..."
+
+if [ -f "$REPO_DIR/systemd/lacylights-frontend.service" ]; then
+    sudo cp "$REPO_DIR/systemd/lacylights-frontend.service" /etc/systemd/system/lacylights-frontend.service
+    sudo chmod 644 /etc/systemd/system/lacylights-frontend.service
+    print_success "Frontend service file installed"
+else
+    print_error "Frontend service file not found at $REPO_DIR/systemd/lacylights-frontend.service"
     exit 1
 fi
 
@@ -79,23 +91,18 @@ print_info "Reloading systemd daemon..."
 sudo systemctl daemon-reload
 print_success "Systemd reloaded"
 
-# Enable service
-print_info "Enabling LacyLights service..."
+# Enable services
+print_info "Enabling LacyLights services..."
 sudo systemctl enable lacylights
-print_success "Service enabled"
+sudo systemctl enable lacylights-frontend
+print_success "Services enabled"
 
 print_header "Service Installation Complete"
-print_success "LacyLights Go backend service installed and enabled"
-print_info ""
-print_info "The service will NOT start automatically yet."
-print_info "First, you need to:"
-print_info "  1. Download Go backend binary to /opt/lacylights/backend/lacylights-server"
-print_info "  2. Make it executable: chmod +x /opt/lacylights/backend/lacylights-server"
-print_info "  3. Set ownership: chown lacylights:lacylights /opt/lacylights/backend/lacylights-server"
-print_info "  4. Start the service with: sudo systemctl start lacylights"
+print_success "LacyLights backend and frontend services installed and enabled"
 print_info ""
 print_info "Useful commands:"
-print_info "  sudo systemctl start lacylights    - Start the service"
-print_info "  sudo systemctl status lacylights   - Check service status"
-print_info "  sudo systemctl stop lacylights     - Stop the service"
-print_info "  sudo journalctl -u lacylights -f   - View logs"
+print_info "  sudo systemctl start lacylights lacylights-frontend  - Start services"
+print_info "  sudo systemctl status lacylights lacylights-frontend - Check status"
+print_info "  sudo systemctl stop lacylights lacylights-frontend   - Stop services"
+print_info "  sudo journalctl -u lacylights -f                     - View backend logs"
+print_info "  sudo journalctl -u lacylights-frontend -f            - View frontend logs"

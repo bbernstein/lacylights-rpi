@@ -43,10 +43,6 @@ BACKEND_VERSION="main"
 FRONTEND_VERSION="main"
 MCP_VERSION="main"
 OFFLINE_BUNDLE=""
-WIFI_SSID="${WIFI_SSID:-}"
-WIFI_PASSWORD="${WIFI_PASSWORD:-}"
-SKIP_WIFI=false
-OFFLINE_MODE_NEEDS_WIFI=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -66,18 +62,6 @@ while [[ $# -gt 0 ]]; do
             OFFLINE_BUNDLE="$2"
             shift 2
             ;;
-        --wifi-ssid)
-            WIFI_SSID="$2"
-            shift 2
-            ;;
-        --wifi-password)
-            WIFI_PASSWORD="$2"
-            shift 2
-            ;;
-        --skip-wifi)
-            SKIP_WIFI=true
-            shift
-            ;;
         --help)
             echo "LacyLights Complete Setup Script"
             echo ""
@@ -92,23 +76,15 @@ while [[ $# -gt 0 ]]; do
             echo "  --frontend-version TAG    Git tag/branch for frontend (default: main)"
             echo "  --mcp-version TAG         Git tag/branch for MCP server (default: main)"
             echo "  --offline-bundle PATH     Use offline bundle (no internet on Pi required)"
-            echo "  --wifi-ssid SSID          WiFi network name to connect to"
-            echo "  --wifi-password PASSWORD  WiFi password"
-            echo "  --skip-wifi               Skip WiFi configuration"
             echo "  --help                    Show this help message"
             echo ""
             echo "Environment Variables:"
             echo "  PI_USER                   Username for SSH (default: pi)"
             echo "                            Example: PI_USER=admin $0 ntclights.local"
-            echo "  WIFI_SSID                 WiFi network name (alternative to --wifi-ssid)"
-            echo "  WIFI_PASSWORD             WiFi password (alternative to --wifi-password)"
             echo ""
-            echo "WiFi Configuration:"
-            echo "  If the Pi needs internet access to download packages, you can configure WiFi:"
-            echo "    $0 ntclights.local --wifi-ssid \"MyNetwork\" --wifi-password \"mypassword\""
-            echo "  Or use environment variables:"
-            echo "    WIFI_SSID=\"MyNetwork\" WIFI_PASSWORD=\"mypassword\" $0 ntclights.local"
-            echo "  If WiFi credentials are not provided, the script will prompt for them."
+            echo "Network Setup:"
+            echo "  The Pi must have internet access (Ethernet or WiFi) before running this script."
+            echo "  Configure WiFi using Raspberry Pi Imager when flashing the SD card."
             echo ""
             echo "Offline Installation:"
             echo "  For Pis without internet access, first prepare an offline bundle:"
@@ -120,7 +96,6 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 pi@lacylights.local"
             echo "  $0 ntclights.local                    # Uses default user 'pi'"
             echo "  PI_USER=admin $0 ntclights.local      # Uses user 'admin'"
-            echo "  $0 ntclights.local --wifi-ssid \"HomeWiFi\" --wifi-password \"secret\""
             echo "  $0 lacylights.local --backend-version v1.1.0 --frontend-version v0.2.0"
             echo "  $0 lacylights.local --offline-bundle lacylights-offline-20251027-160000.tar.gz"
             exit 0
@@ -241,10 +216,19 @@ rsync -avz \
 
 print_success "Setup scripts copied"
 
-# WiFi Configuration (if needed and not skipped)
 print_header "Step 2: Checking Internet Connectivity & Prerequisites"
 
-# First check if Node.js is installed (required for all setups)
+# Check internet connectivity
+print_info "Checking internet connectivity..."
+HAS_INTERNET=$(ssh "$PI_HOST" "ping -c 1 -W 2 8.8.8.8 > /dev/null 2>&1 && echo 'yes' || echo 'no'")
+
+if [ "$HAS_INTERNET" = "yes" ]; then
+    print_success "Pi has internet access"
+else
+    print_warning "Pi does not have internet access"
+fi
+
+# Check for required packages
 print_info "Checking for required packages on Pi..."
 HAS_NODEJS=$(ssh "$PI_HOST" "command -v node &> /dev/null && echo 'yes' || echo 'no'")
 
@@ -265,214 +249,72 @@ check_npm_installed
 ENDSSH
 )
 
-HAS_INTERNET=$(ssh "$PI_HOST" "ping -c 1 -W 2 8.8.8.8 > /dev/null 2>&1 && echo 'yes' || echo 'no'")
-
 if [ "$HAS_NODEJS" = "yes" ]; then
     NODE_VERSION=$(ssh "$PI_HOST" "node -v")
-    print_success "[OK] Node.js is installed: $NODE_VERSION"
+    print_success "Node.js is installed: $NODE_VERSION"
 else
-    print_warning "[FAIL] Node.js is not installed"
+    print_info "Node.js is not installed (will be installed)"
 fi
 
 if [ "$HAS_NPM" = "yes" ]; then
-    # Try to get npm version, checking multiple locations
     NPM_VERSION=$(ssh "$PI_HOST" "npm -v 2>/dev/null || /usr/bin/npm -v 2>/dev/null || /usr/local/bin/npm -v 2>/dev/null || echo 'unknown'")
-    print_success "[OK] npm is installed: v$NPM_VERSION"
+    print_success "npm is installed: v$NPM_VERSION"
 else
-    print_warning "[FAIL] npm is not installed"
+    print_info "npm is not installed (will be installed)"
 fi
 
-if [ "$HAS_INTERNET" = "yes" ]; then
-    print_success "[OK] Pi has internet access"
-else
-    print_warning "[FAIL] Pi does not have internet access"
+# Check if we need internet but don't have it
+NEEDS_PACKAGES=false
+if [ "$HAS_NODEJS" = "no" ] || [ "$HAS_NPM" = "no" ]; then
+    NEEDS_PACKAGES=true
 fi
 
-# For offline mode, Node.js and npm are hard requirements
-# But we'll try to configure WiFi first if packages are missing and there's no internet
+# For offline bundle mode, check requirements
 if [ -n "$OFFLINE_BUNDLE" ]; then
-    if [ "$HAS_NODEJS" = "no" ] || [ "$HAS_NPM" = "no" ]; then
-        # Check if we can get internet to install missing packages
-        if [ "$HAS_INTERNET" = "no" ]; then
-            print_warning ""
-            print_warning "[WARN] OFFLINE MODE: Required packages missing on Raspberry Pi"
-            print_warning ""
-
-            if [ "$HAS_NODEJS" = "no" ]; then
-                print_warning "   Missing: Node.js"
-            fi
-            if [ "$HAS_NPM" = "no" ]; then
-                print_warning "   Missing: npm"
-            fi
-
-            print_warning ""
-            print_info "Offline deployment requires Node.js and npm to be pre-installed."
-            print_info "The Pi currently has no internet access."
-            print_info ""
-            print_info "Let's configure WiFi to enable internet access and install missing packages."
-            print_info "After installation, the Pi can be disconnected from internet for future updates."
-            print_info ""
-
-            # Don't exit - let the WiFi configuration section handle this
-            # Set a flag so we know WiFi is absolutely required
-            OFFLINE_MODE_NEEDS_WIFI=true
-        else
-            # Pi has internet, we can install missing packages
-            print_warning "Some packages are missing but Pi has internet access"
-            print_info "Will attempt to install missing packages during system setup"
-
-            if [ "$HAS_NODEJS" = "no" ]; then
-                print_info "  - Will install: Node.js"
-            fi
-            if [ "$HAS_NPM" = "no" ]; then
-                print_info "  - Will install: npm"
-            fi
+    if [ "$NEEDS_PACKAGES" = "true" ] && [ "$HAS_INTERNET" = "no" ]; then
+        print_error ""
+        print_error "OFFLINE MODE: Required packages missing and no internet access"
+        print_error ""
+        if [ "$HAS_NODEJS" = "no" ]; then
+            print_error "  Missing: Node.js"
         fi
-    fi
-fi
-
-# Determine if WiFi setup is needed
-WIFI_NEEDED=false
-if [ "$HAS_NODEJS" = "no" ] || [ "$HAS_INTERNET" = "no" ] || [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ]; then
-    WIFI_NEEDED=true
-fi
-
-# WiFi Configuration
-# Allow WiFi setup even in offline mode if packages are missing
-if [ "$SKIP_WIFI" = false ] || [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ]; then
-    if [ "$WIFI_NEEDED" = true ]; then
-        if [ "$HAS_INTERNET" = "no" ]; then
-            print_info ""
-            print_info "Internet access is needed to download system packages (Node.js, etc.)"
-            print_info "Let's configure WiFi to enable internet access."
-            print_info ""
+        if [ "$HAS_NPM" = "no" ]; then
+            print_error "  Missing: npm"
         fi
-    else
-        print_info "No WiFi configuration needed - all requirements met"
-    fi
-
-    if [ "$WIFI_NEEDED" = true ]; then
-        # If WiFi credentials were provided via command-line or environment variables
-        if [ -n "$WIFI_SSID" ]; then
-            print_info "Using provided WiFi credentials"
-            print_info "SSID: $WIFI_SSID"
-
-            WIFI_SETUP_RESULT=0
-            ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && bash 00-wifi-setup.sh '$WIFI_SSID' '$WIFI_PASSWORD' true" || WIFI_SETUP_RESULT=$?
-
-            if [ $WIFI_SETUP_RESULT -eq 0 ]; then
-                print_success "[OK] WiFi configured successfully"
-                print_success "Pi now has internet access"
-                HAS_INTERNET="yes"
-            else
-                print_error "[FAIL] WiFi configuration failed"
-
-                if [ "$HAS_NODEJS" = "no" ]; then
-                    print_error "Cannot continue without Node.js and internet access"
-                    print_error "Please either:"
-                    print_error "  1. Check your WiFi credentials and try again"
-                    print_error "  2. Connect Pi to internet via Ethernet"
-                    print_error "  3. Pre-install Node.js manually"
-                    exit 1
-                else
-                    print_warning "Continuing with limited connectivity"
-                fi
-            fi
-        else
-            # Interactive WiFi setup - required if Node.js is missing
-            if [ "$HAS_NODEJS" = "no" ]; then
-                print_error "Node.js is required but not installed"
-                print_info ""
-                print_info "To install Node.js, we need internet access."
-                print_info "Please configure WiFi now."
-                print_info ""
-                WIFI_REQUIRED=true
-            else
-                print_info "Would you like to configure WiFi now?"
-                print_info ""
-                print_info "Options:"
-                print_info "  y - Configure WiFi interactively (recommended)"
-                print_info "  n - Skip WiFi setup"
-                print_info ""
-                WIFI_REQUIRED=false
-            fi
-
-            # Get user choice
-            if [ "$WIFI_REQUIRED" = true ]; then
-                read -p "Configure WiFi to continue? (y/n): " -n 1 -r
-            else
-                read -p "Configure WiFi? (y/n): " -n 1 -r
-            fi
-            echo
-            echo
-
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                print_info "Starting interactive WiFi setup..."
-                echo ""
-
-                # Call the WiFi setup script interactively (it will scan and show networks)
-                WIFI_SETUP_RESULT=0
-                ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && bash 00-wifi-setup.sh" || WIFI_SETUP_RESULT=$?
-
-                if [ $WIFI_SETUP_RESULT -eq 0 ]; then
-                    print_success "[OK] WiFi configured successfully"
-                    print_success "Pi now has internet access"
-                    HAS_INTERNET="yes"
-                else
-                    print_error "[FAIL] WiFi configuration failed"
-
-                    if [ "$WIFI_REQUIRED" = true ]; then
-                        print_error "Cannot continue without internet access"
-                        print_error "Please either:"
-                        print_error "  1. Verify WiFi credentials and run setup again"
-                        print_error "  2. Connect Pi to internet via Ethernet"
-                        print_error "  3. Pre-install Node.js manually"
-                        exit 1
-                    else
-                        print_warning "Continuing without internet"
-                    fi
-                fi
-            else
-                if [ "$WIFI_REQUIRED" = true ]; then
-                    print_error "WiFi setup is required to install Node.js"
-                    print_error "Cannot continue without Node.js"
-                    print_error ""
-                    print_error "Please either:"
-                    print_error "  1. Run setup again and configure WiFi"
-                    print_error "  2. Connect Pi to internet via Ethernet and run setup again"
-                    print_error "  3. Pre-install Node.js manually, then run setup again"
-                    exit 1
-                else
-                    print_info "Skipping WiFi configuration"
-                    print_info "Setup will continue with existing connectivity"
-                fi
-            fi
-        fi
+        print_error ""
+        print_error "Offline deployment requires Node.js and npm to be pre-installed."
+        print_error ""
+        print_error "Please either:"
+        print_error "  1. Connect Pi to internet via Ethernet or WiFi"
+        print_error "  2. Configure WiFi using Raspberry Pi Imager before flashing"
+        print_error "  3. Pre-install Node.js manually on the Pi"
+        print_error ""
+        exit 1
+    elif [ "$NEEDS_PACKAGES" = "true" ]; then
+        print_info "Some packages missing but Pi has internet - will install"
     fi
 else
-    if [ "$OFFLINE_MODE_NEEDS_WIFI" != "true" ]; then
-        print_info "Skipping connectivity check (--skip-wifi flag)"
+    # Online mode - need internet if packages are missing
+    if [ "$NEEDS_PACKAGES" = "true" ] && [ "$HAS_INTERNET" = "no" ]; then
+        print_error ""
+        print_error "Internet access required to install packages"
+        print_error ""
+        if [ "$HAS_NODEJS" = "no" ]; then
+            print_error "  Missing: Node.js"
+        fi
+        if [ "$HAS_NPM" = "no" ]; then
+            print_error "  Missing: npm"
+        fi
+        print_error ""
+        print_error "Please ensure the Pi has internet access:"
+        print_error "  1. Connect via Ethernet cable"
+        print_error "  2. Configure WiFi using Raspberry Pi Imager before flashing"
+        print_error "  3. Or configure WiFi manually on the Pi"
+        print_error ""
+        exit 1
+    elif [ "$NEEDS_PACKAGES" = "true" ]; then
+        print_info "Missing packages will be installed in next step"
     fi
-fi
-
-# Final check: if offline mode needs WiFi and we still don't have it, fail now
-if [ "$OFFLINE_MODE_NEEDS_WIFI" = "true" ] && [ "$HAS_INTERNET" != "yes" ]; then
-    print_error ""
-    print_error "[FAIL] Cannot continue offline deployment without internet access"
-    print_error ""
-    print_error "WiFi configuration was not completed successfully."
-    print_error "Node.js and npm cannot be installed without internet."
-    print_error ""
-    print_error "Please either:"
-    print_error "  1. Run setup again and configure WiFi when prompted"
-    print_error "  2. Connect Pi to internet via Ethernet"
-    print_error "  3. Pre-install Node.js manually:"
-    print_error "     - Connect Pi to internet temporarily"
-    print_error "     - Run: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -"
-    print_error "     - Run: sudo apt-get install -y nodejs"
-    print_error "     - Verify: node -v && npm -v"
-    print_error ""
-    exit 1
 fi
 
 # Run system setup
@@ -480,9 +322,8 @@ print_header "Step 3: System Setup"
 print_info "Installing system dependencies..."
 
 # Pass internet connectivity status to system setup script
-# If we just configured WiFi, force online mode
 if [ "$HAS_INTERNET" = "yes" ]; then
-    print_info "Internet is available - installing packages online"
+    print_info "Installing packages..."
     ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 01-system-setup.sh --force-online"
 else
     print_info "No internet - verifying existing packages only"
@@ -660,6 +501,10 @@ if [ -z "$OFFLINE_BUNDLE" ]; then
     print_header "Step 8: Downloading Releases from GitHub"
     print_info "Downloading LacyLights release archives from GitHub..."
 
+    # Stop services if running (binary can't be overwritten while in use)
+    print_info "Stopping services if running..."
+    ssh "$PI_HOST" "sudo systemctl stop lacylights lacylights-frontend 2>/dev/null || true"
+
     # Ensure directories exist and pi user can write during setup
     print_info "Preparing directories for downloads..."
     ssh "$PI_HOST" << 'DIRSETUP'
@@ -781,8 +626,8 @@ if [ ! -f /opt/lacylights/backend/lacylights-server ] || [ ! -s /opt/lacylights/
     echo "[ERROR] Downloaded binary is missing or empty"
     exit 1
 fi
-chmod +x /opt/lacylights/backend/lacylights-server
-chown lacylights:lacylights /opt/lacylights/backend/lacylights-server
+sudo chmod +x /opt/lacylights/backend/lacylights-server
+sudo chown lacylights:lacylights /opt/lacylights/backend/lacylights-server
 
 echo "[SUCCESS] Go backend binary ready"
 
@@ -803,6 +648,10 @@ else
     # OFFLINE MODE: Extract from bundle
     print_header "Step 8: Extracting from Offline Bundle"
     print_info "Using offline bundle (no internet access required)..."
+
+    # Stop services if running (binary can't be overwritten while in use)
+    print_info "Stopping services if running..."
+    ssh "$PI_HOST" "sudo systemctl stop lacylights lacylights-frontend 2>/dev/null || true"
 
     # Transfer bundle to Pi
     print_info "Transferring offline bundle to Pi..."
@@ -1121,24 +970,38 @@ ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 06-nginx-setup.sh"
 
 print_success "Nginx installed and configured"
 
-# Start service
-print_header "Step 13: Starting Service"
-print_info "Starting LacyLights service..."
+# Start services
+print_header "Step 13: Starting Services"
+print_info "Starting LacyLights backend and frontend services..."
 
-ssh "$PI_HOST" "sudo systemctl start lacylights"
+ssh "$PI_HOST" "sudo systemctl start lacylights lacylights-frontend"
 
-print_success "Service started"
+print_success "Services started"
 
-# Wait for service to be ready
-print_info "Waiting for service to be ready..."
+# Wait for services to be ready
+print_info "Waiting for services to be ready..."
 sleep 5
 
 # Check service status
+SERVICES_OK=true
+
 if ssh "$PI_HOST" "sudo systemctl is-active --quiet lacylights"; then
-    print_success "LacyLights service is running"
+    print_success "Backend service is running"
 else
-    print_error "LacyLights service failed to start"
+    print_error "Backend service failed to start"
     print_error "Check logs with: ssh $PI_HOST 'sudo journalctl -u lacylights -n 50'"
+    SERVICES_OK=false
+fi
+
+if ssh "$PI_HOST" "sudo systemctl is-active --quiet lacylights-frontend"; then
+    print_success "Frontend service is running"
+else
+    print_error "Frontend service failed to start"
+    print_error "Check logs with: ssh $PI_HOST 'sudo journalctl -u lacylights-frontend -n 50'"
+    SERVICES_OK=false
+fi
+
+if [ "$SERVICES_OK" = false ]; then
     exit 1
 fi
 
