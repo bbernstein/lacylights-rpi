@@ -191,6 +191,58 @@ else
     print_success "SSH access verified"
 fi
 
+# Check if initial setup has been run
+print_header "Checking Initial Setup"
+
+print_info "Verifying LacyLights prerequisites..."
+SETUP_MISSING=false
+MISSING_ITEMS=""
+
+# Check for lacylights user
+if ! ssh "$PI_HOST" "id lacylights &>/dev/null"; then
+    SETUP_MISSING=true
+    MISSING_ITEMS+="\n  - lacylights system user"
+fi
+
+# Check for lacylights group
+if ! ssh "$PI_HOST" "getent group lacylights &>/dev/null"; then
+    SETUP_MISSING=true
+    MISSING_ITEMS+="\n  - lacylights group"
+fi
+
+# Check for nginx
+if ! ssh "$PI_HOST" "command -v nginx &>/dev/null"; then
+    SETUP_MISSING=true
+    MISSING_ITEMS+="\n  - nginx"
+fi
+
+# Check for Node.js
+if ! ssh "$PI_HOST" "command -v node &>/dev/null"; then
+    SETUP_MISSING=true
+    MISSING_ITEMS+="\n  - Node.js"
+fi
+
+if [ "$SETUP_MISSING" = true ]; then
+    print_error "Initial setup has not been completed on this Pi"
+    print_error ""
+    print_error "Missing prerequisites:$MISSING_ITEMS"
+    print_error ""
+    print_error "Please run the initial setup script first:"
+    print_error ""
+    print_error "  ./scripts/setup-new-pi.sh $PI_HOSTNAME"
+    print_error ""
+    print_error "The setup-new-pi.sh script will:"
+    print_error "  - Install required packages (Node.js, nginx, etc.)"
+    print_error "  - Create the lacylights system user and group"
+    print_error "  - Set up directory permissions"
+    print_error "  - Configure systemd services"
+    print_error ""
+    print_error "After initial setup completes, run deploy.sh for subsequent updates."
+    exit 1
+fi
+
+print_success "All prerequisites verified"
+
 # Check and update hostname if needed
 print_header "Verifying Hostname Configuration"
 
