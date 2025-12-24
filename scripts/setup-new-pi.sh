@@ -962,24 +962,38 @@ ssh -t "$PI_HOST" "cd ~/lacylights-setup/setup && sudo bash 06-nginx-setup.sh"
 
 print_success "Nginx installed and configured"
 
-# Start service
-print_header "Step 13: Starting Service"
-print_info "Starting LacyLights service..."
+# Start services
+print_header "Step 13: Starting Services"
+print_info "Starting LacyLights backend and frontend services..."
 
-ssh "$PI_HOST" "sudo systemctl start lacylights"
+ssh "$PI_HOST" "sudo systemctl start lacylights lacylights-frontend"
 
-print_success "Service started"
+print_success "Services started"
 
-# Wait for service to be ready
-print_info "Waiting for service to be ready..."
+# Wait for services to be ready
+print_info "Waiting for services to be ready..."
 sleep 5
 
 # Check service status
+SERVICES_OK=true
+
 if ssh "$PI_HOST" "sudo systemctl is-active --quiet lacylights"; then
-    print_success "LacyLights service is running"
+    print_success "Backend service is running"
 else
-    print_error "LacyLights service failed to start"
+    print_error "Backend service failed to start"
     print_error "Check logs with: ssh $PI_HOST 'sudo journalctl -u lacylights -n 50'"
+    SERVICES_OK=false
+fi
+
+if ssh "$PI_HOST" "sudo systemctl is-active --quiet lacylights-frontend"; then
+    print_success "Frontend service is running"
+else
+    print_error "Frontend service failed to start"
+    print_error "Check logs with: ssh $PI_HOST 'sudo journalctl -u lacylights-frontend -n 50'"
+    SERVICES_OK=false
+fi
+
+if [ "$SERVICES_OK" = false ]; then
     exit 1
 fi
 
