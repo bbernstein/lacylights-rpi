@@ -210,14 +210,14 @@ if ! ssh "$PI_HOST" "getent group lacylights &>/dev/null"; then
     MISSING_ITEMS+="\n  - lacylights group"
 fi
 
-# Check for nginx
-if ! ssh "$PI_HOST" "command -v nginx &>/dev/null"; then
+# Check for nginx (check common paths as well as PATH)
+if ! ssh "$PI_HOST" "command -v nginx &>/dev/null || [ -x /usr/sbin/nginx ]"; then
     SETUP_MISSING=true
     MISSING_ITEMS+="\n  - nginx"
 fi
 
-# Check for Node.js
-if ! ssh "$PI_HOST" "command -v node &>/dev/null"; then
+# Check for Node.js (check common paths as well as PATH)
+if ! ssh "$PI_HOST" "command -v node &>/dev/null || [ -x /usr/bin/node ]"; then
     SETUP_MISSING=true
     MISSING_ITEMS+="\n  - Node.js"
 fi

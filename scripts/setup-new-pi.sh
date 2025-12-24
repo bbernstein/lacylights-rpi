@@ -622,8 +622,8 @@ if [ ! -f /opt/lacylights/backend/lacylights-server ] || [ ! -s /opt/lacylights/
     echo "[ERROR] Downloaded binary is missing or empty"
     exit 1
 fi
-chmod +x /opt/lacylights/backend/lacylights-server
-chown lacylights:lacylights /opt/lacylights/backend/lacylights-server
+sudo chmod +x /opt/lacylights/backend/lacylights-server
+sudo chown lacylights:lacylights /opt/lacylights/backend/lacylights-server
 
 echo "[SUCCESS] Go backend binary ready"
 
