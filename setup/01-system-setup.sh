@@ -241,28 +241,23 @@ else
     fi
 fi
 
-# Install Nginx (optional, skip in offline mode)
-if [ "$OFFLINE_MODE" = false ]; then
-    print_info "Checking Nginx (optional reverse proxy)..."
+# Install Nginx (required for reverse proxy)
+print_info "Checking Nginx..."
 
-    if command -v nginx &> /dev/null; then
-        print_success "Nginx already installed"
-    else
-        read -p "Install Nginx reverse proxy? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            sudo apt-get install -y nginx
-            print_success "Nginx installed"
-        else
-            print_info "Skipping Nginx installation"
-        fi
-    fi
+if command -v nginx &> /dev/null; then
+    print_success "Nginx already installed"
 else
-    print_info "Checking Nginx..."
-    if command -v nginx &> /dev/null; then
-        print_success "Nginx already installed"
+    if [ "$OFFLINE_MODE" = true ]; then
+        print_error "Nginx is not installed"
+        print_error "OFFLINE MODE: Cannot install Nginx without internet"
+        print_error ""
+        print_error "To prepare the Pi for offline setup, first run with internet:"
+        print_error "  sudo apt-get update && sudo apt-get install -y nginx"
+        exit 1
     else
-        print_warning "Nginx not installed (optional, skipping in offline mode)"
+        print_info "Installing Nginx reverse proxy..."
+        sudo apt-get install -y nginx
+        print_success "Nginx installed"
     fi
 fi
 
