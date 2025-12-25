@@ -88,7 +88,7 @@ trigger_ap_mode() {
     log_info "Triggering AP mode via GraphQL..."
 
     local response
-    response=$(curl -s -X POST "${GRAPHQL_ENDPOINT}" \
+    response=$(curl -s --max-time 5 -X POST "${GRAPHQL_ENDPOINT}" \
         -H "Content-Type: application/json" \
         -d '{"query":"mutation { startAPMode { success message mode } }"}' 2>/dev/null || echo '{"errors":[{"message":"Connection refused"}]}')
 
@@ -134,8 +134,23 @@ main() {
     log_warning "No network connection detected"
     log_info "Starting AP mode for configuration..."
 
-    # Wait a bit for backend service to be ready
-    sleep 5
+    # Wait for backend service to be ready with retry logic
+    log_info "Waiting for backend service..."
+    local max_retries=10
+    local retry=0
+    while [ $retry -lt $max_retries ]; do
+        if curl -sf --max-time 2 "http://localhost:4000/health" &>/dev/null; then
+            log_success "Backend service is ready"
+            break
+        fi
+        retry=$((retry + 1))
+        if [ $retry -lt $max_retries ]; then
+            log_info "Backend not ready, retrying... ($retry/$max_retries)"
+            sleep 2
+        else
+            log_warning "Backend service not responding after $max_retries attempts"
+        fi
+    done
 
     if trigger_ap_mode; then
         exit 0

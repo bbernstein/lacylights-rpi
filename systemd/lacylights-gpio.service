@@ -12,6 +12,10 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
+# Limit restart attempts to prevent boot loops
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
 # Run as root for GPIO access
 User=root
 Group=root

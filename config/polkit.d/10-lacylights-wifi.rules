@@ -1,8 +1,14 @@
 // Allow lacylights user to control NetworkManager WiFi operations
 // This enables the web UI to enable/disable WiFi and manage AP mode
 polkit.addRule(function(action, subject) {
-    if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0 &&
-        subject.user == "lacylights") {
+    // Only allow specific NetworkManager actions needed for WiFi control
+    if (subject.user == "lacylights" && (
+        action.id == "org.freedesktop.NetworkManager.settings.modify.system" ||
+        action.id == "org.freedesktop.NetworkManager.enable-disable-wifi" ||
+        action.id == "org.freedesktop.NetworkManager.network-control" ||
+        action.id == "org.freedesktop.NetworkManager.wifi.share.protected" ||
+        action.id == "org.freedesktop.NetworkManager.wifi.share.open"
+    )) {
         return polkit.Result.YES;
     }
 });

@@ -11,6 +11,9 @@ RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
 
+# Timeout to prevent boot delays if script hangs
+TimeoutStartSec=60s
+
 # Environment
 Environment="WIFI_CHECK_TIMEOUT=30"
 Environment="WIFI_INTERFACE=wlan0"

@@ -62,7 +62,7 @@ trigger_ap_mode() {
     log_info "Button held for ${HOLD_TIME}s - triggering AP mode..."
 
     local response
-    response=$(curl -s -X POST "${GRAPHQL_ENDPOINT}" \
+    response=$(curl -s --max-time 5 -X POST "${GRAPHQL_ENDPOINT}" \
         -H "Content-Type: application/json" \
         -d '{"query":"mutation { startAPMode { success message mode } }"}' 2>/dev/null || echo '{"errors":[{"message":"Connection refused"}]}')
 
