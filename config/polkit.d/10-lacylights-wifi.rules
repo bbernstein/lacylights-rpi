@@ -1,0 +1,8 @@
+// Allow lacylights user to control NetworkManager WiFi operations
+// This enables the web UI to enable/disable WiFi and manage AP mode
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0 &&
+        subject.user == "lacylights") {
+        return polkit.Result.YES;
+    }
+});

@@ -528,6 +528,13 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     cat "$LOCAL_DIR/systemd/lacylights-sudoers" | ssh "$PI_HOST" "sudo tee /etc/sudoers.d/lacylights > /dev/null"
     ssh "$PI_HOST" "sudo chmod 0440 /etc/sudoers.d/lacylights"
 
+    # Deploy polkit rule for WiFi control
+    if [ -f "$LOCAL_DIR/config/polkit.d/10-lacylights-wifi.rules" ]; then
+        print_info "Deploying polkit rule for WiFi control..."
+        cat "$LOCAL_DIR/config/polkit.d/10-lacylights-wifi.rules" | ssh "$PI_HOST" "sudo tee /etc/polkit-1/rules.d/10-lacylights-wifi.rules > /dev/null"
+        print_success "Polkit WiFi rule deployed"
+    fi
+
     print_success "Backend binary synced"
 fi
 
