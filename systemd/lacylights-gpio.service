@@ -1,0 +1,25 @@
+[Unit]
+Description=LacyLights GPIO Button Monitor
+Documentation=https://github.com/bbernstein/lacylights-rpi
+After=lacylights-go.service
+Requires=lacylights-go.service
+
+[Service]
+Type=simple
+ExecStart=/opt/lacylights/scripts/gpio-button-monitor.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Run as root for GPIO access
+User=root
+Group=root
+
+# Environment
+Environment="GPIO_PIN=17"
+Environment="HOLD_TIME=5"
+Environment="GRAPHQL_ENDPOINT=http://localhost:4000/graphql"
+
+[Install]
+WantedBy=multi-user.target

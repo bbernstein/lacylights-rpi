@@ -84,6 +84,49 @@ print_info "Enabling LacyLights service..."
 sudo systemctl enable lacylights
 print_success "Service enabled"
 
+# Install WiFi mode check service
+print_info "Installing WiFi mode check service..."
+if [ -f "$REPO_DIR/systemd/lacylights-wifi.service" ]; then
+    sudo cp "$REPO_DIR/systemd/lacylights-wifi.service" /etc/systemd/system/lacylights-wifi.service
+    sudo chmod 644 /etc/systemd/system/lacylights-wifi.service
+    print_success "WiFi service file installed"
+
+    # Copy WiFi mode check script
+    if [ -f "$REPO_DIR/scripts/wifi-mode-check.sh" ]; then
+        sudo cp "$REPO_DIR/scripts/wifi-mode-check.sh" /opt/lacylights/scripts/wifi-mode-check.sh
+        sudo chmod +x /opt/lacylights/scripts/wifi-mode-check.sh
+        sudo chown lacylights:lacylights /opt/lacylights/scripts/wifi-mode-check.sh
+        print_success "WiFi mode check script installed"
+    fi
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable lacylights-wifi
+    print_success "WiFi service enabled"
+else
+    print_info "WiFi service file not found (optional feature)"
+fi
+
+# Install GPIO button monitor service
+print_info "Installing GPIO button monitor service..."
+if [ -f "$REPO_DIR/systemd/lacylights-gpio.service" ]; then
+    sudo cp "$REPO_DIR/systemd/lacylights-gpio.service" /etc/systemd/system/lacylights-gpio.service
+    sudo chmod 644 /etc/systemd/system/lacylights-gpio.service
+    print_success "GPIO service file installed"
+
+    # Copy GPIO button monitor script
+    if [ -f "$REPO_DIR/scripts/gpio-button-monitor.sh" ]; then
+        sudo cp "$REPO_DIR/scripts/gpio-button-monitor.sh" /opt/lacylights/scripts/gpio-button-monitor.sh
+        sudo chmod +x /opt/lacylights/scripts/gpio-button-monitor.sh
+        print_success "GPIO button monitor script installed"
+    fi
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable lacylights-gpio
+    print_success "GPIO service enabled"
+else
+    print_info "GPIO service file not found (optional feature)"
+fi
+
 print_header "Service Installation Complete"
 print_success "LacyLights Go backend service installed and enabled"
 print_info ""

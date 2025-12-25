@@ -135,12 +135,81 @@ else
     print_info "Route priority will need to be configured manually"
 fi
 
+# Install gpiod for GPIO button monitoring
+print_info "Installing gpiod for GPIO button support..."
+if dpkg -l | grep -q "gpiod"; then
+    print_success "gpiod already installed"
+else
+    sudo apt-get update
+    sudo apt-get install -y gpiod
+    print_success "gpiod installed"
+fi
+
+# Install dnsmasq captive portal configuration
+print_info "Installing captive portal DNS configuration..."
+CAPTIVE_PORTAL_CONF="$SETUP_DIR/config/networkmanager/dnsmasq-shared.d/captive-portal.conf"
+if [ -f "$CAPTIVE_PORTAL_CONF" ]; then
+    sudo mkdir -p /etc/NetworkManager/dnsmasq-shared.d
+    sudo cp "$CAPTIVE_PORTAL_CONF" /etc/NetworkManager/dnsmasq-shared.d/captive-portal.conf
+    print_success "Captive portal DNS configuration installed"
+else
+    print_warning "Captive portal config not found at $CAPTIVE_PORTAL_CONF"
+fi
+
+# Install captive portal nginx configuration
+print_info "Installing captive portal nginx configuration..."
+CAPTIVE_NGINX="$SETUP_DIR/nginx/sites-available/lacylights-captive"
+if [ -f "$CAPTIVE_NGINX" ]; then
+    sudo cp "$CAPTIVE_NGINX" /etc/nginx/sites-available/lacylights-captive
+    print_success "Captive portal nginx configuration installed"
+    print_info "Note: This config will be activated automatically when AP mode is enabled"
+else
+    print_warning "Captive portal nginx config not found at $CAPTIVE_NGINX"
+fi
+
+# Create pre-configured AP connection profile (disabled by default)
+print_info "Creating AP mode connection profile..."
+
+# Generate SSID from MAC address
+if [ -f "/sys/class/net/wlan0/address" ]; then
+    MAC=$(cat /sys/class/net/wlan0/address | tr -d ':' | tail -c 5 | tr '[:lower:]' '[:upper:]')
+    AP_SSID="lacylights-${MAC}"
+else
+    AP_SSID="lacylights-setup"
+fi
+
+# Check if AP connection already exists
+if nmcli connection show "$AP_SSID" &> /dev/null; then
+    print_success "AP connection profile '$AP_SSID' already exists"
+else
+    # Create AP connection (but don't activate it)
+    sudo nmcli connection add \
+        type wifi \
+        ifname wlan0 \
+        con-name "$AP_SSID" \
+        autoconnect no \
+        ssid "$AP_SSID" \
+        mode ap \
+        ipv4.method shared \
+        ipv4.addresses "192.168.4.1/24" \
+        wifi.band bg \
+        wifi.channel 6 2>/dev/null && \
+    print_success "AP connection profile '$AP_SSID' created" || \
+    print_warning "Could not create AP connection profile (this is OK if running off-device)"
+fi
+
 print_header "Network Setup Complete"
 print_success "Network configuration completed"
 print_info ""
 print_info "Dual Network Configuration:"
 print_info "  • Ethernet (eth0): Local DMX/Art-Net network"
 print_info "  • WiFi (wlan0): Internet access (when configured)"
+print_info ""
+print_info "AP Mode Configuration:"
+print_info "  • SSID: $AP_SSID"
+print_info "  • IP: 192.168.4.1"
+print_info "  • AP mode will auto-start if no WiFi connection at boot"
+print_info "  • Hold GPIO button for 5s to force AP mode"
 print_info ""
 print_info "Network Status:"
 nmcli device status
