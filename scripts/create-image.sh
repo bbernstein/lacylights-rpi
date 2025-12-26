@@ -3,12 +3,13 @@
 # LacyLights SD Card Image Creation Script
 # Creates a compressed .img.gz file for imaging new Raspberry Pis
 #
-# This script:
-# 1. Connects to a running Pi to clean up and prepare for imaging
-# 2. Guides user to transfer SD card to Mac
-# 3. Auto-detects the SD card device
-# 4. Creates a minimal image (only used space + buffer)
-# 5. Compresses the image for distribution
+# Steps (use --start-from-step N to skip earlier steps):
+#   1. Prepare Pi   - SSH to Pi, stop services, clean caches, zero free space
+#   2. Shutdown Pi  - Safely shut down Pi, prompt to transfer SD card to Mac
+#   3. Detect SD    - Auto-detect SD card device on Mac
+#   4. Calculate    - Analyze partitions, calculate optimal image size
+#   5. Create image - Use dd to create raw disk image
+#   6. Compress     - Compress image with gzip -9
 
 set -e
 
@@ -71,10 +72,11 @@ check_macos() {
 
 # Default values
 PI_HOST="${PI_HOST:-lacylights.local}"
-PI_USER="${PI_USER:-lacylights}"
+PI_USER="${PI_USER:-pi}"
 OUTPUT_DIR="${OUTPUT_DIR:-$HOME/Desktop}"
 IMAGE_NAME="${IMAGE_NAME:-lacylights}"
-SKIP_CLEANUP="${SKIP_CLEANUP:-false}"
+START_FROM_STEP="${START_FROM_STEP:-1}"
+SD_DEVICE="${SD_DEVICE:-}"
 BUFFER_MB=512  # Extra space buffer in MB
 
 # Parse command line arguments
@@ -96,33 +98,50 @@ while [[ $# -gt 0 ]]; do
             IMAGE_NAME="$2"
             shift 2
             ;;
-        --skip-cleanup)
-            SKIP_CLEANUP=true
-            shift
+        --start-from-step)
+            START_FROM_STEP="$2"
+            shift 2
+            ;;
+        --device)
+            SD_DEVICE="$2"
+            shift 2
             ;;
         --help)
             echo "LacyLights SD Card Image Creation Script"
             echo ""
             echo "Usage: $0 [options]"
             echo ""
+            echo "Steps:"
+            echo "  1. Prepare Pi   - SSH to Pi, stop services, clean caches, zero free space"
+            echo "  2. Shutdown Pi  - Safely shut down Pi, prompt to transfer SD card to Mac"
+            echo "  3. Detect SD    - Auto-detect SD card device on Mac"
+            echo "  4. Calculate    - Analyze partitions, calculate optimal image size"
+            echo "  5. Create image - Use dd to create raw disk image"
+            echo "  6. Compress     - Compress image with gzip -9"
+            echo ""
             echo "Options:"
-            echo "  --host HOSTNAME      Pi hostname (default: lacylights.local)"
-            echo "  --user USERNAME      Pi username (default: lacylights)"
-            echo "  --output-dir PATH    Output directory (default: ~/Desktop)"
-            echo "  --name NAME          Image base name (default: lacylights)"
-            echo "  --skip-cleanup       Skip the Pi cleanup step"
-            echo "  --help               Show this help message"
+            echo "  --host HOSTNAME        Pi hostname (default: lacylights.local)"
+            echo "  --user USERNAME        Pi username (default: pi)"
+            echo "  --output-dir PATH      Output directory (default: ~/Desktop)"
+            echo "  --name NAME            Image base name (default: lacylights)"
+            echo "  --start-from-step N    Start from step N, skipping earlier steps (1-6)"
+            echo "  --device /dev/diskN    SD card device (skips auto-detection if provided)"
+            echo "  --help                 Show this help message"
             echo ""
             echo "Environment Variables:"
             echo "  PI_HOST              Same as --host"
             echo "  PI_USER              Same as --user"
             echo "  OUTPUT_DIR           Same as --output-dir"
             echo "  IMAGE_NAME           Same as --name"
+            echo "  START_FROM_STEP      Same as --start-from-step"
+            echo "  SD_DEVICE            Same as --device"
             echo ""
             echo "Examples:"
-            echo "  $0"
-            echo "  $0 --host mypi.local --user pi"
-            echo "  $0 --skip-cleanup --name myproject"
+            echo "  $0                                    # Full process from step 1"
+            echo "  $0 --host mypi.local --user pi        # Use different Pi"
+            echo "  $0 --start-from-step 3                # Skip Pi steps, start at SD detection"
+            echo "  $0 --start-from-step 3 --device /dev/disk8  # Skip to step 3 with known device"
+            echo "  $0 --start-from-step 5 --device /dev/disk8  # Just create and compress image"
             echo ""
             exit 0
             ;;
@@ -142,19 +161,35 @@ print_header "LacyLights SD Card Image Creator"
 
 echo ""
 echo "Configuration:"
-echo "  Pi Host:      ${PI_HOST}"
-echo "  Pi User:      ${PI_USER}"
-echo "  Output Dir:   ${OUTPUT_DIR}"
-echo "  Image Name:   ${IMAGE_NAME}-${TIMESTAMP}.img.gz"
-echo "  Skip Cleanup: ${SKIP_CLEANUP}"
+echo "  Pi Host:        ${PI_HOST}"
+echo "  Pi User:        ${PI_USER}"
+echo "  Output Dir:     ${OUTPUT_DIR}"
+echo "  Image Name:     ${IMAGE_NAME}-${TIMESTAMP}.img.gz"
+echo "  Start from:     Step ${START_FROM_STEP}"
+if [[ -n "${SD_DEVICE}" ]]; then
+echo "  SD Device:      ${SD_DEVICE}"
+fi
 echo ""
+
+# Validate start step
+if [[ ! "${START_FROM_STEP}" =~ ^[1-6]$ ]]; then
+    print_error "Invalid step number: ${START_FROM_STEP} (must be 1-6)"
+    exit 1
+fi
+
+# If starting from step 4 or later, device is required
+if [[ ${START_FROM_STEP} -ge 4 && -z "${SD_DEVICE}" ]]; then
+    print_error "Starting from step ${START_FROM_STEP} requires --device to be specified"
+    echo "Example: $0 --start-from-step ${START_FROM_STEP} --device /dev/disk8"
+    exit 1
+fi
 
 check_macos
 
 # ============================================================================
 # STEP 1: Connect to Pi and prepare for imaging
 # ============================================================================
-if [[ "${SKIP_CLEANUP}" != "true" ]]; then
+if [[ ${START_FROM_STEP} -le 1 ]]; then
     print_step "1" "Prepare the Raspberry Pi for imaging"
 
     print_action "Ensure the SD card is inserted in the running Raspberry Pi"
@@ -224,91 +259,104 @@ fi
 # ============================================================================
 # STEP 2: Shut down the Pi and transfer SD card
 # ============================================================================
-print_step "2" "Shut down the Pi and transfer the SD card"
+if [[ ${START_FROM_STEP} -le 2 ]]; then
+    print_step "2" "Shut down the Pi and transfer the SD card"
 
-if [[ "${SKIP_CLEANUP}" != "true" ]]; then
-    echo "The Pi will now be shut down safely."
-    echo ""
-    print_action "After shutdown, remove the SD card and insert it into your Mac"
-    echo ""
-    read -p "Shut down the Pi now? [Y/n]: " SHUTDOWN_CONFIRM
-
-    if [[ "${SHUTDOWN_CONFIRM}" != "n" && "${SHUTDOWN_CONFIRM}" != "N" ]]; then
-        print_info "Shutting down Pi..."
-        ssh "${PI_USER}@${PI_HOST}" "sudo shutdown -h now" 2>/dev/null || true
-        print_success "Shutdown command sent"
+    if [[ ${START_FROM_STEP} -le 1 ]]; then
+        # We did step 1, so Pi is running and needs shutdown
+        echo "The Pi will now be shut down safely."
         echo ""
-        echo "Wait for the Pi's LED to stop blinking (about 10-20 seconds),"
-        echo "then safely remove the SD card."
-    fi
-else
-    print_action "Remove the SD card from the Pi and insert it into your Mac"
-fi
+        print_action "After shutdown, remove the SD card and insert it into your Mac"
+        echo ""
+        read -p "Shut down the Pi now? [Y/n]: " SHUTDOWN_CONFIRM
 
-wait_for_enter
+        if [[ "${SHUTDOWN_CONFIRM}" != "n" && "${SHUTDOWN_CONFIRM}" != "N" ]]; then
+            print_info "Shutting down Pi..."
+            ssh "${PI_USER}@${PI_HOST}" "sudo shutdown -h now" 2>/dev/null || true
+            print_success "Shutdown command sent"
+            echo ""
+            echo "Wait for the Pi's LED to stop blinking (about 10-20 seconds),"
+            echo "then safely remove the SD card."
+        fi
+    else
+        # Started at step 2, just prompt for card transfer
+        print_action "Remove the SD card from the Pi and insert it into your Mac"
+    fi
+
+    wait_for_enter
+fi
 
 # ============================================================================
 # STEP 3: Detect the SD card on Mac
 # ============================================================================
-print_step "3" "Detect the SD card"
+if [[ ${START_FROM_STEP} -le 3 ]]; then
+    print_step "3" "Detect the SD card"
 
-print_info "Scanning for removable disks..."
-echo ""
+    # If device was provided via --device, use it directly
+    if [[ -n "${SD_DEVICE}" ]]; then
+        print_info "Using provided device: ${SD_DEVICE}"
+    else
+        print_info "Scanning for removable disks..."
+        echo ""
 
-# List external/removable disks
-DISK_LIST=$(diskutil list external 2>/dev/null || diskutil list)
+        # List external/removable disks
+        DISK_LIST=$(diskutil list external 2>/dev/null || diskutil list)
 
-echo "Available external disks:"
-echo "${DISK_LIST}"
-echo ""
+        echo "Available external disks:"
+        echo "${DISK_LIST}"
+        echo ""
 
-# Try to auto-detect the SD card
-# Look for disks that are external and have typical SD card sizes (8GB-128GB)
-DETECTED_DISK=""
-for disk in /dev/disk[0-9]*; do
-    # Skip partitions, only look at whole disks
-    if [[ "${disk}" =~ s[0-9]+$ ]]; then
-        continue
-    fi
-
-    # Check if it's external/removable
-    INFO=$(diskutil info "${disk}" 2>/dev/null || true)
-    if echo "${INFO}" | grep -q "Removable Media.*Yes\|External.*Yes\|Protocol.*USB\|Protocol.*SD"; then
-        SIZE_BYTES=$(echo "${INFO}" | grep "Disk Size" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
-        SIZE_GB=$((SIZE_BYTES / 1024 / 1024 / 1024))
-
-        # Typical SD cards are 8GB to 512GB
-        if [[ ${SIZE_GB} -ge 4 && ${SIZE_GB} -le 512 ]]; then
-            DISK_NAME=$(basename "${disk}")
-            print_info "Detected potential SD card: ${disk} (${SIZE_GB} GB)"
-            DETECTED_DISK="${disk}"
-        fi
-    fi
-done
-
-echo ""
-if [[ -n "${DETECTED_DISK}" ]]; then
-    print_info "Auto-detected SD card: ${DETECTED_DISK}"
-    read -p "Use this disk? [Y/n]: " USE_DETECTED
-    if [[ "${USE_DETECTED}" == "n" || "${USE_DETECTED}" == "N" ]]; then
+        # Try to auto-detect the SD card
+        # Look for disks that are external and have typical SD card sizes (8GB-128GB)
         DETECTED_DISK=""
+        for disk in /dev/disk[0-9]*; do
+            # Skip partitions, only look at whole disks
+            if [[ "${disk}" =~ s[0-9]+$ ]]; then
+                continue
+            fi
+
+            # Check if it's external/removable
+            INFO=$(diskutil info "${disk}" 2>/dev/null || true)
+            if echo "${INFO}" | grep -q "Removable Media.*Yes\|External.*Yes\|Protocol.*USB\|Protocol.*SD"; then
+                SIZE_BYTES=$(echo "${INFO}" | grep "Disk Size" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
+                SIZE_GB=$((SIZE_BYTES / 1024 / 1024 / 1024))
+
+                # Typical SD cards are 8GB to 512GB
+                if [[ ${SIZE_GB} -ge 4 && ${SIZE_GB} -le 512 ]]; then
+                    DISK_NAME=$(basename "${disk}")
+                    print_info "Detected potential SD card: ${disk} (${SIZE_GB} GB)"
+                    DETECTED_DISK="${disk}"
+                fi
+            fi
+        done
+
+        echo ""
+        if [[ -n "${DETECTED_DISK}" ]]; then
+            print_info "Auto-detected SD card: ${DETECTED_DISK}"
+            read -p "Use this disk? [Y/n]: " USE_DETECTED
+            if [[ "${USE_DETECTED}" == "n" || "${USE_DETECTED}" == "N" ]]; then
+                DETECTED_DISK=""
+            fi
+        fi
+
+        if [[ -z "${DETECTED_DISK}" ]]; then
+            echo ""
+            echo "Enter the disk device (e.g., disk4, disk8):"
+            read -p "Disk: /dev/" DISK_NUM
+            DETECTED_DISK="/dev/${DISK_NUM}"
+        fi
+
+        SD_DEVICE="${DETECTED_DISK}"
+    fi
+
+    # Validate the disk exists
+    if [[ ! -e "${SD_DEVICE}" ]]; then
+        print_error "Disk ${SD_DEVICE} does not exist"
+        exit 1
     fi
 fi
 
-if [[ -z "${DETECTED_DISK}" ]]; then
-    echo ""
-    echo "Enter the disk device (e.g., disk4, disk8):"
-    read -p "Disk: /dev/" DISK_NUM
-    DETECTED_DISK="/dev/${DISK_NUM}"
-fi
-
-# Validate the disk exists
-if [[ ! -e "${DETECTED_DISK}" ]]; then
-    print_error "Disk ${DETECTED_DISK} does not exist"
-    exit 1
-fi
-
-SD_DEVICE="${DETECTED_DISK}"
+# Set up device paths (needed for all subsequent steps)
 RAW_DEVICE="/dev/r$(basename "${SD_DEVICE}")"
 
 # Get disk info
@@ -317,116 +365,145 @@ DISK_SIZE_BYTES=$(echo "${DISK_INFO}" | grep "Disk Size" | head -1 | sed 's/.*(\
 DISK_SIZE_GB=$((DISK_SIZE_BYTES / 1024 / 1024 / 1024))
 DISK_SIZE_MB=$((DISK_SIZE_BYTES / 1024 / 1024))
 
-echo ""
-echo "Selected disk: ${SD_DEVICE}"
-echo "Disk size: ${DISK_SIZE_GB} GB (${DISK_SIZE_MB} MB)"
-echo ""
+if [[ ${START_FROM_STEP} -le 3 ]]; then
+    echo ""
+    echo "Selected disk: ${SD_DEVICE}"
+    echo "Disk size: ${DISK_SIZE_GB} GB (${DISK_SIZE_MB} MB)"
+    echo ""
 
-# Safety check - confirm this is the right disk
-print_warning "This will read from ${SD_DEVICE}"
-echo ""
-diskutil list "${SD_DEVICE}"
-echo ""
-read -p "Is this the correct SD card? [y/N]: " CONFIRM_DISK
+    # Safety check - confirm this is the right disk
+    print_warning "This will read from ${SD_DEVICE}"
+    echo ""
+    diskutil list "${SD_DEVICE}"
+    echo ""
+    read -p "Is this the correct SD card? [y/N]: " CONFIRM_DISK
 
-if [[ "${CONFIRM_DISK}" != "y" && "${CONFIRM_DISK}" != "Y" ]]; then
-    print_error "Aborted by user"
-    exit 1
+    if [[ "${CONFIRM_DISK}" != "y" && "${CONFIRM_DISK}" != "Y" ]]; then
+        print_error "Aborted by user"
+        exit 1
+    fi
 fi
 
 # ============================================================================
 # STEP 4: Calculate optimal image size
 # ============================================================================
-print_step "4" "Calculate optimal image size"
+# Always calculate size if we need to create the image (step 5)
+if [[ ${START_FROM_STEP} -le 5 ]]; then
+    if [[ ${START_FROM_STEP} -le 4 ]]; then
+        print_step "4" "Calculate optimal image size"
+        print_info "Analyzing partition layout..."
+    fi
 
-print_info "Analyzing partition layout..."
+    # Get partition info
+    PART_INFO=$(diskutil list "${SD_DEVICE}")
+    if [[ ${START_FROM_STEP} -le 4 ]]; then
+        echo "${PART_INFO}"
+        echo ""
+    fi
 
-# Get partition info
-PART_INFO=$(diskutil list "${SD_DEVICE}")
-echo "${PART_INFO}"
-echo ""
+    # Find the last partition's end sector
+    # We need to capture only the used portion of the disk
+    # For a typical Pi SD card, we have:
+    #   - Partition 1: boot (FAT32, ~256MB)
+    #   - Partition 2: root (ext4, varies)
 
-# Find the last partition's end sector
-# We need to capture only the used portion of the disk
-# For a typical Pi SD card, we have:
-#   - Partition 1: boot (FAT32, ~256MB)
-#   - Partition 2: root (ext4, varies)
+    # Get the size of partition 2 (main Linux partition)
+    PARTITION_2="${SD_DEVICE}s2"
+    if [[ -e "${PARTITION_2}" ]]; then
+        PART2_INFO=$(diskutil info "${PARTITION_2}" 2>/dev/null || true)
+        PART2_SIZE_BYTES=$(echo "${PART2_INFO}" | grep "Disk Size" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
+        PART2_OFFSET_BYTES=$(echo "${PART2_INFO}" | grep "Partition Offset" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
 
-# Get the size of partition 2 (main Linux partition)
-PARTITION_2="${SD_DEVICE}s2"
-if [[ -e "${PARTITION_2}" ]]; then
-    PART2_INFO=$(diskutil info "${PARTITION_2}" 2>/dev/null || true)
-    PART2_SIZE_BYTES=$(echo "${PART2_INFO}" | grep "Disk Size" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
-    PART2_OFFSET_BYTES=$(echo "${PART2_INFO}" | grep "Partition Offset" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
+        if [[ ${PART2_SIZE_BYTES} -gt 0 && ${PART2_OFFSET_BYTES} -gt 0 ]]; then
+            # Total needed = offset + size of last partition + buffer
+            NEEDED_BYTES=$((PART2_OFFSET_BYTES + PART2_SIZE_BYTES + BUFFER_MB * 1024 * 1024))
+            NEEDED_MB=$((NEEDED_BYTES / 1024 / 1024))
 
-    if [[ ${PART2_SIZE_BYTES} -gt 0 && ${PART2_OFFSET_BYTES} -gt 0 ]]; then
-        # Total needed = offset + size of last partition + buffer
-        NEEDED_BYTES=$((PART2_OFFSET_BYTES + PART2_SIZE_BYTES + BUFFER_MB * 1024 * 1024))
-        NEEDED_MB=$((NEEDED_BYTES / 1024 / 1024))
-
-        print_info "Partition 2 offset: $((PART2_OFFSET_BYTES / 1024 / 1024)) MB"
-        print_info "Partition 2 size: $((PART2_SIZE_BYTES / 1024 / 1024)) MB"
-        print_info "Calculated image size needed: ${NEEDED_MB} MB (including ${BUFFER_MB} MB buffer)"
+            if [[ ${START_FROM_STEP} -le 4 ]]; then
+                print_info "Partition 2 offset: $((PART2_OFFSET_BYTES / 1024 / 1024)) MB"
+                print_info "Partition 2 size: $((PART2_SIZE_BYTES / 1024 / 1024)) MB"
+                print_info "Calculated image size needed: ${NEEDED_MB} MB (including ${BUFFER_MB} MB buffer)"
+            fi
+        else
+            print_warning "Could not determine partition layout, using full disk size"
+            NEEDED_MB=${DISK_SIZE_MB}
+        fi
     else
-        print_warning "Could not determine partition layout, using full disk size"
+        print_warning "Could not find partition 2, using full disk size"
         NEEDED_MB=${DISK_SIZE_MB}
     fi
-else
-    print_warning "Could not find partition 2, using full disk size"
-    NEEDED_MB=${DISK_SIZE_MB}
-fi
 
-# Cap at actual disk size
-if [[ ${NEEDED_MB} -gt ${DISK_SIZE_MB} ]]; then
-    NEEDED_MB=${DISK_SIZE_MB}
-fi
+    # Cap at actual disk size
+    if [[ ${NEEDED_MB} -gt ${DISK_SIZE_MB} ]]; then
+        NEEDED_MB=${DISK_SIZE_MB}
+    fi
 
-echo ""
-echo "Image will capture: ${NEEDED_MB} MB of ${DISK_SIZE_MB} MB total"
-echo "Output file: ${IMAGE_FILE}"
-echo ""
+    if [[ ${START_FROM_STEP} -le 4 ]]; then
+        echo ""
+        echo "Image will capture: ${NEEDED_MB} MB of ${DISK_SIZE_MB} MB total"
+        echo "Output file: ${IMAGE_FILE}"
+        echo ""
+    fi
+fi
 
 # ============================================================================
 # STEP 5: Unmount and create image
 # ============================================================================
-print_step "5" "Create the disk image"
+if [[ ${START_FROM_STEP} -le 5 ]]; then
+    print_step "5" "Create the disk image"
 
-print_info "Unmounting disk partitions..."
-diskutil unmountDisk "${SD_DEVICE}" || true
+    print_info "Unmounting disk partitions..."
+    diskutil unmountDisk "${SD_DEVICE}" || true
 
-print_warning "Creating image - this will take several minutes"
-echo "Source: ${RAW_DEVICE}"
-echo "Target: ${IMAGE_FILE}"
-echo "Size: ${NEEDED_MB} MB"
-echo ""
+    print_warning "Creating image - this will take several minutes"
+    echo "Source: ${RAW_DEVICE}"
+    echo "Target: ${IMAGE_FILE}"
+    echo "Size: ${NEEDED_MB} MB"
+    echo ""
 
-# Calculate block count (1MB blocks)
-BLOCK_COUNT=${NEEDED_MB}
+    # Calculate block count (1MB blocks)
+    BLOCK_COUNT=${NEEDED_MB}
 
-# Create the image
-sudo dd if="${RAW_DEVICE}" of="${IMAGE_FILE}" bs=1m count="${BLOCK_COUNT}" status=progress
+    # Create the image
+    sudo dd if="${RAW_DEVICE}" of="${IMAGE_FILE}" bs=1m count="${BLOCK_COUNT}" status=progress
 
-print_success "Raw image created: ${IMAGE_FILE}"
+    print_success "Raw image created: ${IMAGE_FILE}"
 
-# Get uncompressed size
-UNCOMPRESSED_SIZE=$(ls -lh "${IMAGE_FILE}" | awk '{print $5}')
-print_info "Uncompressed image size: ${UNCOMPRESSED_SIZE}"
+    # Get uncompressed size
+    UNCOMPRESSED_SIZE=$(ls -lh "${IMAGE_FILE}" | awk '{print $5}')
+    print_info "Uncompressed image size: ${UNCOMPRESSED_SIZE}"
+fi
 
 # ============================================================================
 # STEP 6: Compress the image
 # ============================================================================
-print_step "6" "Compress the image"
+if [[ ${START_FROM_STEP} -le 6 ]]; then
+    print_step "6" "Compress the image"
 
-print_info "Compressing with gzip -9 (maximum compression)..."
-echo "This may take several minutes..."
-echo ""
+    # If starting from step 6, verify the image file exists
+    if [[ ${START_FROM_STEP} -eq 6 ]]; then
+        if [[ ! -f "${IMAGE_FILE}" ]]; then
+            print_error "Image file not found: ${IMAGE_FILE}"
+            echo ""
+            echo "When starting from step 6, the uncompressed image must already exist."
+            echo "Either run from step 5, or specify the correct output directory/name."
+            exit 1
+        fi
+        UNCOMPRESSED_SIZE=$(ls -lh "${IMAGE_FILE}" | awk '{print $5}')
+        print_info "Found existing image: ${IMAGE_FILE} (${UNCOMPRESSED_SIZE})"
+    fi
 
-gzip -9 -v "${IMAGE_FILE}"
+    print_info "Compressing with gzip -9 (maximum compression)..."
+    echo "This may take several minutes..."
+    echo ""
 
-print_success "Compression complete!"
+    gzip -9 -v "${IMAGE_FILE}"
 
-# Get compressed size
-COMPRESSED_SIZE=$(ls -lh "${COMPRESSED_FILE}" | awk '{print $5}')
+    print_success "Compression complete!"
+
+    # Get compressed size
+    COMPRESSED_SIZE=$(ls -lh "${COMPRESSED_FILE}" | awk '{print $5}')
+fi
 
 # ============================================================================
 # Summary
