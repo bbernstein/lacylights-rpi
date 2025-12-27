@@ -271,11 +271,31 @@ if [[ ${START_FROM_STEP} -le 1 ]]; then
     PI_RESULT=$(ssh "${PI_USER}@${PI_HOST}" bash <<'REMOTE_SCRIPT'
 set -e
 
-echo "[1/5] Stopping LacyLights services..."
+echo "[1/6] Validating system configuration..."
+# Check sudoers file is valid - this catches corrupted config before imaging
+if [ -f /etc/sudoers.d/lacylights ]; then
+    if ! sudo visudo -c -f /etc/sudoers.d/lacylights 2>&1; then
+        echo "ERROR: Sudoers file is corrupted! Cannot create image from this system."
+        echo "Fix with: sudo rm /etc/sudoers.d/lacylights && redeploy"
+        exit 1
+    fi
+    echo "Sudoers file: OK"
+fi
+
+# Check LacyLights installation
+if [ ! -f /opt/lacylights/backend/lacylights-server ]; then
+    echo "WARNING: LacyLights backend not found at expected location"
+fi
+if [ ! -d /opt/lacylights/frontend-src/.next ]; then
+    echo "WARNING: LacyLights frontend build not found"
+fi
+echo "System validation passed"
+
+echo "[2/6] Stopping LacyLights services..."
 sudo systemctl stop lacylights-go.service 2>/dev/null || true
 sudo systemctl stop lacylights.service 2>/dev/null || true
 
-echo "[2/5] Cleaning package manager cache and temp files..."
+echo "[3/6] Cleaning package manager cache and temp files..."
 sudo apt-get clean
 sudo rm -rf /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true
 sudo journalctl --vacuum-time=1d 2>/dev/null || true
@@ -284,7 +304,7 @@ sudo rm -rf /tmp/* 2>/dev/null || true
 rm -rf ~/.thumbnails/* 2>/dev/null || true
 sync
 
-echo "[3/5] Calculating disk usage..."
+echo "[4/6] Calculating disk usage..."
 # Get used space in MB
 USED_MB=$(df -BM / | tail -1 | awk '{print $3}' | tr -d 'M')
 echo "Used space on root: ${USED_MB} MB"
@@ -297,7 +317,7 @@ echo "Boot partition: ${BOOT_MB} MB"
 IMAGE_MB=$(( ((BOOT_MB + USED_MB + 1024 + 255) / 256) * 256 ))
 echo "Recommended image size: ${IMAGE_MB} MB"
 
-echo "[4/5] Zeroing ~1GB of free space for compression..."
+echo "[5/6] Zeroing ~1GB of free space for compression..."
 # Only zero 1GB - enough to help compression without taking forever
 ZERO_MB=1024
 AVAIL_MB=$(df -BM / | tail -1 | awk '{print $4}' | tr -d 'M')
@@ -310,7 +330,7 @@ if [ ${ZERO_MB} -gt 0 ]; then
     sudo rm -f /zero.file
 fi
 
-echo "[5/5] Final sync..."
+echo "[6/6] Final sync..."
 # NOTE: We do NOT modify cmdline.txt here because this is the SOURCE card.
 # The init_resize for auto-expand should only be added when writing to a NEW card,
 # not on the source card which will be put back into the original Pi.
