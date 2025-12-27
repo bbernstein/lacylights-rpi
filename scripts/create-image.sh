@@ -13,6 +13,24 @@
 
 set -e
 
+# Track partial files for cleanup
+PARTIAL_IMAGE_FILE=""
+
+# Cleanup function for interrupted operations
+cleanup() {
+    local exit_code=$?
+    if [[ -n "${PARTIAL_IMAGE_FILE}" && -f "${PARTIAL_IMAGE_FILE}" ]]; then
+        echo ""
+        print_warning "Cleaning up partial image file..."
+        rm -f "${PARTIAL_IMAGE_FILE}"
+        print_info "Removed: ${PARTIAL_IMAGE_FILE}"
+    fi
+    exit ${exit_code}
+}
+
+# Set up trap for cleanup on interrupt
+trap cleanup EXIT INT TERM
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -186,6 +204,16 @@ fi
 
 check_macos
 
+# Verify sudo access early (needed for dd later)
+if [[ ${START_FROM_STEP} -le 5 ]]; then
+    print_info "Verifying sudo access for disk operations..."
+    if ! sudo -v 2>/dev/null; then
+        print_error "This script requires sudo access for disk imaging"
+        exit 1
+    fi
+    print_success "Sudo access verified"
+fi
+
 # ============================================================================
 # STEP 1: Connect to Pi and prepare for imaging
 # ============================================================================
@@ -219,33 +247,49 @@ if [[ ${START_FROM_STEP} -le 1 ]]; then
 
     print_success "SSH connection verified"
 
-    # Run cleanup on the Pi
-    print_info "Stopping LacyLights services..."
-    ssh "${PI_USER}@${PI_HOST}" "sudo systemctl stop lacylights-go.service 2>/dev/null || true"
-    ssh "${PI_USER}@${PI_HOST}" "sudo systemctl stop lacylights-mcp.service 2>/dev/null || true"
+    # Run all cleanup commands in a single SSH session for reliability
+    print_info "Running cleanup on Pi (this may take several minutes)..."
 
-    print_info "Cleaning package manager cache..."
-    ssh "${PI_USER}@${PI_HOST}" "sudo apt-get clean"
+    ssh "${PI_USER}@${PI_HOST}" bash <<'REMOTE_SCRIPT'
+set -e
 
-    print_info "Removing log files..."
-    ssh "${PI_USER}@${PI_HOST}" "sudo rm -rf /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true"
-    ssh "${PI_USER}@${PI_HOST}" "sudo journalctl --vacuum-time=1d 2>/dev/null || true"
+echo "[1/7] Stopping LacyLights services..."
+sudo systemctl stop lacylights-go.service 2>/dev/null || true
+sudo systemctl stop lacylights.service 2>/dev/null || true
 
-    print_info "Clearing user caches..."
-    ssh "${PI_USER}@${PI_HOST}" "rm -rf ~/.cache/* 2>/dev/null || true"
-    ssh "${PI_USER}@${PI_HOST}" "rm -rf /tmp/* 2>/dev/null || true"
+echo "[2/7] Cleaning package manager cache..."
+sudo apt-get clean
 
-    print_info "Clearing thumbnail caches..."
-    ssh "${PI_USER}@${PI_HOST}" "rm -rf ~/.thumbnails/* 2>/dev/null || true"
+echo "[3/7] Removing old log files..."
+sudo rm -rf /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true
+sudo journalctl --vacuum-time=1d 2>/dev/null || true
 
-    print_info "Zeroing free space for better compression (this takes a while)..."
-    echo "  Creating zero file to fill free space..."
-    # Use a controlled approach - create file until disk is ~95% full, then remove
-    ssh "${PI_USER}@${PI_HOST}" "sudo dd if=/dev/zero of=/zero.file bs=1M status=progress 2>&1 || true"
-    ssh "${PI_USER}@${PI_HOST}" "sudo rm -f /zero.file"
+echo "[4/7] Clearing user caches..."
+rm -rf ~/.cache/* 2>/dev/null || true
+sudo rm -rf /tmp/* 2>/dev/null || true
+rm -rf ~/.thumbnails/* 2>/dev/null || true
 
-    print_info "Syncing filesystem..."
-    ssh "${PI_USER}@${PI_HOST}" "sync"
+echo "[5/7] Calculating safe zeroing size..."
+# Get available space in MB, leave 100MB safety margin
+AVAIL_MB=$(df -BM / | tail -1 | awk '{print $4}' | tr -d 'M')
+ZERO_MB=$((AVAIL_MB - 100))
+if [ ${ZERO_MB} -gt 0 ]; then
+    echo "[6/7] Zeroing ${ZERO_MB} MB of free space for better compression..."
+    sudo dd if=/dev/zero of=/zero.file bs=1M count=${ZERO_MB} status=progress 2>&1 || true
+    sudo rm -f /zero.file
+else
+    echo "[6/7] Skipping zeroing (not enough free space)"
+fi
+
+echo "[7/7] Syncing filesystem..."
+sync
+
+echo "Cleanup complete!"
+REMOTE_SCRIPT
+
+    if [[ $? -ne 0 ]]; then
+        print_warning "Some cleanup steps may have failed, but continuing..."
+    fi
 
     print_success "Pi preparation complete!"
 
@@ -275,7 +319,29 @@ if [[ ${START_FROM_STEP} -le 2 ]]; then
             ssh "${PI_USER}@${PI_HOST}" "sudo shutdown -h now" 2>/dev/null || true
             print_success "Shutdown command sent"
             echo ""
-            echo "Wait for the Pi's LED to stop blinking (about 10-20 seconds),"
+            echo "Waiting for Pi to shut down (checking SSH availability)..."
+
+            # Wait for SSH to become unavailable (max 60 seconds)
+            SHUTDOWN_TIMEOUT=60
+            SHUTDOWN_WAIT=0
+            while [[ ${SHUTDOWN_WAIT} -lt ${SHUTDOWN_TIMEOUT} ]]; do
+                if ! ssh -o ConnectTimeout=2 -o BatchMode=yes "${PI_USER}@${PI_HOST}" "echo" 2>/dev/null; then
+                    print_success "Pi has shut down (SSH no longer responding)"
+                    break
+                fi
+                sleep 2
+                SHUTDOWN_WAIT=$((SHUTDOWN_WAIT + 2))
+                echo -n "."
+            done
+            echo ""
+
+            if [[ ${SHUTDOWN_WAIT} -ge ${SHUTDOWN_TIMEOUT} ]]; then
+                print_warning "Timeout waiting for shutdown. Pi may still be running."
+                echo "Please verify the Pi has shut down before removing the SD card."
+            fi
+
+            echo ""
+            echo "Wait for the Pi's green LED to stop blinking,"
             echo "then safely remove the SD card."
         fi
     else
@@ -452,6 +518,18 @@ fi
 if [[ ${START_FROM_STEP} -le 5 ]]; then
     print_step "5" "Create the disk image"
 
+    # Check available disk space on output directory
+    OUTPUT_AVAIL_MB=$(df -BM "${OUTPUT_DIR}" | tail -1 | awk '{print $4}' | tr -d 'M')
+    SPACE_NEEDED_MB=$((NEEDED_MB + 1024))  # Image + 1GB buffer for compression temp
+
+    if [[ ${OUTPUT_AVAIL_MB} -lt ${SPACE_NEEDED_MB} ]]; then
+        print_error "Insufficient disk space in ${OUTPUT_DIR}"
+        echo "  Available: ${OUTPUT_AVAIL_MB} MB"
+        echo "  Needed:    ${SPACE_NEEDED_MB} MB (image + compression buffer)"
+        exit 1
+    fi
+    print_info "Disk space check passed: ${OUTPUT_AVAIL_MB} MB available, ${SPACE_NEEDED_MB} MB needed"
+
     print_info "Unmounting disk partitions..."
     diskutil unmountDisk "${SD_DEVICE}" || true
 
@@ -461,11 +539,20 @@ if [[ ${START_FROM_STEP} -le 5 ]]; then
     echo "Size: ${NEEDED_MB} MB"
     echo ""
 
+    # Track for cleanup if interrupted
+    PARTIAL_IMAGE_FILE="${IMAGE_FILE}"
+
     # Calculate block count (1MB blocks)
     BLOCK_COUNT=${NEEDED_MB}
 
     # Create the image
-    sudo dd if="${RAW_DEVICE}" of="${IMAGE_FILE}" bs=1m count="${BLOCK_COUNT}" status=progress
+    if ! sudo dd if="${RAW_DEVICE}" of="${IMAGE_FILE}" bs=1m count="${BLOCK_COUNT}" status=progress; then
+        print_error "Failed to create disk image"
+        exit 1
+    fi
+
+    # Clear partial file tracking on success
+    PARTIAL_IMAGE_FILE=""
 
     print_success "Raw image created: ${IMAGE_FILE}"
 
@@ -503,6 +590,13 @@ if [[ ${START_FROM_STEP} -le 6 ]]; then
 
     # Get compressed size
     COMPRESSED_SIZE=$(ls -lh "${COMPRESSED_FILE}" | awk '{print $5}')
+
+    # Generate SHA256 checksum
+    print_info "Generating SHA256 checksum..."
+    CHECKSUM_FILE="${COMPRESSED_FILE}.sha256"
+    shasum -a 256 "${COMPRESSED_FILE}" | awk '{print $1}' > "${CHECKSUM_FILE}"
+    CHECKSUM=$(cat "${CHECKSUM_FILE}")
+    print_success "Checksum saved to: ${CHECKSUM_FILE}"
 fi
 
 # ============================================================================
@@ -511,13 +605,27 @@ fi
 print_header "Image Creation Complete!"
 
 echo ""
-echo "Output file: ${COMPRESSED_FILE}"
+echo "Output files:"
+echo "  Image:    ${COMPRESSED_FILE}"
+if [[ -n "${CHECKSUM}" ]]; then
+echo "  Checksum: ${CHECKSUM_FILE}"
+echo ""
+echo "SHA256: ${CHECKSUM}"
+fi
 echo ""
 echo "Size summary:"
+if [[ -n "${DISK_SIZE_MB}" ]]; then
 echo "  Original disk:     ${DISK_SIZE_MB} MB"
+fi
+if [[ -n "${NEEDED_MB}" ]]; then
 echo "  Captured:          ${NEEDED_MB} MB"
+fi
+if [[ -n "${UNCOMPRESSED_SIZE}" ]]; then
 echo "  Uncompressed:      ${UNCOMPRESSED_SIZE}"
+fi
+if [[ -n "${COMPRESSED_SIZE}" ]]; then
 echo "  Compressed:        ${COMPRESSED_SIZE}"
+fi
 echo ""
 echo "To write this image to a new SD card:"
 echo ""
