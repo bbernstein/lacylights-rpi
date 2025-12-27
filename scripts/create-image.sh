@@ -250,84 +250,57 @@ if [[ ${START_FROM_STEP} -le 1 ]]; then
     # Run all cleanup commands in a single SSH session for reliability
     print_info "Running cleanup on Pi (this may take several minutes)..."
 
-    # Run cleanup and shrink in a single comprehensive SSH session
-    ssh "${PI_USER}@${PI_HOST}" bash <<'REMOTE_SCRIPT'
+    # Run cleanup on Pi - can't shrink mounted filesystem, so we:
+    # 1. Calculate used space
+    # 2. Clean up caches/logs
+    # 3. Zero ~1GB of free space (enough for good compression, not the whole disk)
+    # 4. Enable auto-expand for first boot on new card
+    # Then on Mac we'll copy only the used portion + buffer
+
+    PI_RESULT=$(ssh "${PI_USER}@${PI_HOST}" bash <<'REMOTE_SCRIPT'
 set -e
 
-echo "[1/6] Stopping LacyLights services..."
+echo "[1/5] Stopping LacyLights services..."
 sudo systemctl stop lacylights-go.service 2>/dev/null || true
 sudo systemctl stop lacylights.service 2>/dev/null || true
 
-echo "[2/6] Cleaning package manager cache and temp files..."
+echo "[2/5] Cleaning package manager cache and temp files..."
 sudo apt-get clean
 sudo rm -rf /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true
 sudo journalctl --vacuum-time=1d 2>/dev/null || true
 rm -rf ~/.cache/* 2>/dev/null || true
 sudo rm -rf /tmp/* 2>/dev/null || true
 rm -rf ~/.thumbnails/* 2>/dev/null || true
+sync
 
-echo "[3/6] Getting disk usage..."
+echo "[3/5] Calculating disk usage..."
+# Get used space in MB
 USED_MB=$(df -BM / | tail -1 | awk '{print $3}' | tr -d 'M')
-echo "Used space: ${USED_MB} MB"
+echo "Used space on root: ${USED_MB} MB"
 
-# Calculate target size (used + 512MB headroom, rounded up to next 256MB)
-TARGET_MB=$(( ((USED_MB + 512 + 255) / 256) * 256 ))
-echo "Target filesystem size: ${TARGET_MB} MB"
+# Get boot partition size
+BOOT_MB=$(df -BM /boot/firmware 2>/dev/null | tail -1 | awk '{print $2}' | tr -d 'M' || echo "512")
+echo "Boot partition: ${BOOT_MB} MB"
 
-echo "[4/6] Shrinking filesystem..."
-# Check filesystem first
-sudo e2fsck -f -y /dev/mmcblk0p2 || true
+# Calculate image size needed (boot + used root + 1GB buffer, rounded to 256MB)
+IMAGE_MB=$(( ((BOOT_MB + USED_MB + 1024 + 255) / 256) * 256 ))
+echo "Recommended image size: ${IMAGE_MB} MB"
 
-# Get minimum size
-MIN_BLOCKS=$(sudo resize2fs -P /dev/mmcblk0p2 2>&1 | grep -oP 'minimum size.*: \K[0-9]+' || echo "0")
-if [ "$MIN_BLOCKS" -gt 0 ]; then
-    MIN_MB=$((MIN_BLOCKS * 4 / 1024))
-    echo "Minimum filesystem size: ${MIN_MB} MB"
-    # Ensure target is at least minimum + buffer
-    if [ $TARGET_MB -lt $((MIN_MB + 256)) ]; then
-        TARGET_MB=$((MIN_MB + 512))
-        echo "Adjusted target to: ${TARGET_MB} MB"
-    fi
-fi
-
-# Resize filesystem
-echo "Resizing filesystem to ${TARGET_MB}M..."
-sudo resize2fs /dev/mmcblk0p2 ${TARGET_MB}M
-echo "Filesystem resized!"
-
-echo "[5/6] Shrinking partition..."
-# Get partition start sector
-ROOT_START=$(sudo fdisk -l /dev/mmcblk0 2>/dev/null | grep mmcblk0p2 | awk '{print $2}')
-if [ -z "$ROOT_START" ]; then
-    ROOT_START=1050624
-fi
-TARGET_BYTES=$((TARGET_MB * 1024 * 1024))
-TARGET_SECTORS=$((TARGET_BYTES / 512))
-END_SECTOR=$((ROOT_START + TARGET_SECTORS))
-TOTAL_MB=$((END_SECTOR * 512 / 1024 / 1024))
-
-echo "Partition will end at sector ${END_SECTOR} (total: ${TOTAL_MB} MB)"
-
-# Resize partition
-sudo parted /dev/mmcblk0 ---pretend-input-tty <<EOF
-resizepart 2 ${END_SECTOR}s
-Yes
-EOF
-echo "Partition resized!"
-
-# Now zero out free space - MUCH smaller after shrinking!
-echo "[6/6] Zeroing free space for compression..."
+echo "[4/5] Zeroing ~1GB of free space for compression..."
+# Only zero 1GB - enough to help compression without taking forever
+ZERO_MB=1024
 AVAIL_MB=$(df -BM / | tail -1 | awk '{print $4}' | tr -d 'M')
-ZERO_MB=$((AVAIL_MB - 50))  # Leave 50MB margin
+if [ ${AVAIL_MB} -lt ${ZERO_MB} ]; then
+    ZERO_MB=$((AVAIL_MB - 100))
+fi
 if [ ${ZERO_MB} -gt 0 ]; then
-    echo "Zeroing ${ZERO_MB} MB (free space in shrunk partition)..."
+    echo "Zeroing ${ZERO_MB} MB..."
     sudo dd if=/dev/zero of=/zero.file bs=1M count=${ZERO_MB} status=progress 2>&1 || true
     sudo rm -f /zero.file
-else
-    echo "Skipping zeroing (minimal free space)"
 fi
 
-# Enable auto-expand for first boot
+echo "[5/5] Enabling auto-expand for first boot..."
+# Enable auto-expand so the filesystem expands when written to a new card
 if [ -f /boot/firmware/cmdline.txt ]; then
     CMDLINE_FILE=/boot/firmware/cmdline.txt
 elif [ -f /boot/cmdline.txt ]; then
@@ -336,43 +309,49 @@ else
     CMDLINE_FILE=""
 fi
 
-if [ -n "$CMDLINE_FILE" ] && ! grep -q "init_resize" "$CMDLINE_FILE" 2>/dev/null; then
-    if [ -f /usr/lib/raspi-config/init_resize.sh ]; then
-        sudo sed -i 's/$/ init=\/usr\/lib\/raspi-config\/init_resize.sh/' "$CMDLINE_FILE"
-        echo "Auto-expand enabled for first boot!"
+if [ -n "$CMDLINE_FILE" ]; then
+    if ! grep -q "init_resize" "$CMDLINE_FILE" 2>/dev/null; then
+        if [ -f /usr/lib/raspi-config/init_resize.sh ]; then
+            sudo sed -i 's/$/ init=\/usr\/lib\/raspi-config\/init_resize.sh/' "$CMDLINE_FILE"
+            echo "Auto-expand enabled!"
+        else
+            echo "Warning: init_resize.sh not found"
+        fi
+    else
+        echo "Auto-expand already enabled"
     fi
 fi
 
 sync
+
 echo ""
-echo "=== Summary ==="
-echo "Used space:      ${USED_MB} MB"
-echo "Filesystem size: ${TARGET_MB} MB"
-echo "Total image:     ${TOTAL_MB} MB"
-echo "==============="
+echo "=== PREPARATION COMPLETE ==="
+echo "USED_MB=${USED_MB}"
+echo "IMAGE_MB=${IMAGE_MB}"
+echo "============================"
 REMOTE_SCRIPT
+)
 
     if [[ $? -ne 0 ]]; then
-        print_error "Filesystem shrink failed!"
-        echo "The SD card may still be usable but the image will be larger."
-        read -p "Continue anyway? [y/N]: " CONTINUE_ANYWAY
-        if [[ "${CONTINUE_ANYWAY}" != "y" && "${CONTINUE_ANYWAY}" != "Y" ]]; then
-            exit 1
-        fi
-    else
-        print_success "Filesystem and partition shrunk successfully!"
+        print_error "Pi preparation failed!"
+        exit 1
     fi
 
-    # Get final partition info for image size calculation
-    print_info "Getting final partition layout..."
-    FINAL_INFO=$(ssh "${PI_USER}@${PI_HOST}" "sudo fdisk -l /dev/mmcblk0 2>/dev/null | grep mmcblk0p2")
-    FINAL_END_SECTOR=$(echo "${FINAL_INFO}" | awk '{print $3}')
-    # Calculate total bytes needed (end sector * 512 bytes + 1MB buffer)
-    if [[ -n "${FINAL_END_SECTOR}" ]]; then
-        SHRUNK_SIZE_MB=$(( (FINAL_END_SECTOR * 512 / 1024 / 1024) + 1 ))
-        print_info "Shrunk image size will be: ${SHRUNK_SIZE_MB} MB"
+    # Parse the results
+    echo "${PI_RESULT}"
+
+    # Extract the calculated image size from the output
+    USED_MB=$(echo "${PI_RESULT}" | grep "^USED_MB=" | cut -d= -f2)
+    CALCULATED_IMAGE_MB=$(echo "${PI_RESULT}" | grep "^IMAGE_MB=" | cut -d= -f2)
+
+    if [[ -n "${CALCULATED_IMAGE_MB}" ]]; then
+        print_success "Pi preparation complete!"
+        print_info "Used space: ${USED_MB} MB"
+        print_info "Recommended image size: ${CALCULATED_IMAGE_MB} MB"
         # Export for use in step 4
-        export SHRUNK_SIZE_MB
+        export SHRUNK_SIZE_MB="${CALCULATED_IMAGE_MB}"
+    else
+        print_warning "Could not determine image size, will calculate from partition table"
     fi
 fi
 
