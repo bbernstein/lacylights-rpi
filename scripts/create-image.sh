@@ -95,6 +95,7 @@ OUTPUT_DIR="${OUTPUT_DIR:-$HOME/Desktop}"
 IMAGE_NAME="${IMAGE_NAME:-lacylights}"
 START_FROM_STEP="${START_FROM_STEP:-1}"
 SD_DEVICE="${SD_DEVICE:-}"
+IMAGE_SIZE_MB="${IMAGE_SIZE_MB:-}"  # Manual override for image size
 BUFFER_MB=512  # Extra space buffer in MB
 
 # Parse command line arguments
@@ -124,6 +125,10 @@ while [[ $# -gt 0 ]]; do
             SD_DEVICE="$2"
             shift 2
             ;;
+        --image-size)
+            IMAGE_SIZE_MB="$2"
+            shift 2
+            ;;
         --help)
             echo "LacyLights SD Card Image Creation Script"
             echo ""
@@ -144,6 +149,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --name NAME            Image base name (default: lacylights)"
             echo "  --start-from-step N    Start from step N, skipping earlier steps (1-6)"
             echo "  --device /dev/diskN    SD card device (skips auto-detection if provided)"
+            echo "  --image-size MB        Override image size in MB (use when resuming from step 3+)"
             echo "  --help                 Show this help message"
             echo ""
             echo "Environment Variables:"
@@ -153,6 +159,7 @@ while [[ $# -gt 0 ]]; do
             echo "  IMAGE_NAME           Same as --name"
             echo "  START_FROM_STEP      Same as --start-from-step"
             echo "  SD_DEVICE            Same as --device"
+            echo "  IMAGE_SIZE_MB        Same as --image-size"
             echo ""
             echo "Examples:"
             echo "  $0                                    # Full process from step 1"
@@ -160,6 +167,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --start-from-step 3                # Skip Pi steps, start at SD detection"
             echo "  $0 --start-from-step 3 --device /dev/disk8  # Skip to step 3 with known device"
             echo "  $0 --start-from-step 5 --device /dev/disk8  # Just create and compress image"
+            echo "  $0 --start-from-step 4 --device /dev/disk8 --image-size 7168  # Resume with known size"
             echo ""
             exit 0
             ;;
@@ -186,6 +194,9 @@ echo "  Image Name:     ${IMAGE_NAME}-${TIMESTAMP}.img.gz"
 echo "  Start from:     Step ${START_FROM_STEP}"
 if [[ -n "${SD_DEVICE}" ]]; then
 echo "  SD Device:      ${SD_DEVICE}"
+fi
+if [[ -n "${IMAGE_SIZE_MB}" ]]; then
+echo "  Image Size:     ${IMAGE_SIZE_MB} MB (manual override)"
 fi
 echo ""
 
@@ -522,11 +533,19 @@ if [[ ${START_FROM_STEP} -le 5 ]]; then
         echo ""
     fi
 
-    # If we shrunk the partition in step 1, use that calculated size
-    if [[ -n "${SHRUNK_SIZE_MB}" && ${SHRUNK_SIZE_MB} -gt 0 ]]; then
+    # Priority order for image size:
+    # 1. Manual override via --image-size
+    # 2. Calculated size from step 1 (SHRUNK_SIZE_MB)
+    # 3. Fall back to reading partition info from macOS
+    if [[ -n "${IMAGE_SIZE_MB}" && ${IMAGE_SIZE_MB} -gt 0 ]]; then
+        NEEDED_MB=${IMAGE_SIZE_MB}
+        if [[ ${START_FROM_STEP} -le 4 ]]; then
+            print_info "Using manual override image size: ${NEEDED_MB} MB"
+        fi
+    elif [[ -n "${SHRUNK_SIZE_MB}" && ${SHRUNK_SIZE_MB} -gt 0 ]]; then
         NEEDED_MB=${SHRUNK_SIZE_MB}
         if [[ ${START_FROM_STEP} -le 4 ]]; then
-            print_info "Using shrunk partition size from step 1: ${NEEDED_MB} MB"
+            print_info "Using calculated partition size from step 1: ${NEEDED_MB} MB"
         fi
     else
         # Fall back to reading partition info from macOS
@@ -540,10 +559,22 @@ if [[ ${START_FROM_STEP} -le 5 ]]; then
         PARTITION_2="${SD_DEVICE}s2"
         if [[ -e "${PARTITION_2}" ]]; then
             PART2_INFO=$(diskutil info "${PARTITION_2}" 2>/dev/null || true)
-            PART2_SIZE_BYTES=$(echo "${PART2_INFO}" | grep "Disk Size" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
-            PART2_OFFSET_BYTES=$(echo "${PART2_INFO}" | grep "Partition Offset" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
 
-            if [[ ${PART2_SIZE_BYTES} -gt 0 && ${PART2_OFFSET_BYTES} -gt 0 ]]; then
+            # macOS diskutil format: "Disk Size:                 127.5 GB (127461941248 Bytes)..."
+            # Extract the bytes value from parentheses
+            PART2_SIZE_BYTES=$(echo "${PART2_INFO}" | grep "Disk Size" | head -1 | sed -E 's/.*\(([0-9]+) Bytes\).*/\1/' || echo "0")
+
+            # macOS diskutil format: "Partition Offset:          545259520 Bytes (1064960 512-Byte...)"
+            # Extract the bytes value before "Bytes"
+            PART2_OFFSET_BYTES=$(echo "${PART2_INFO}" | grep "Partition Offset" | head -1 | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1) == "Bytes") print $i}' || echo "0")
+
+            # Debug output
+            if [[ ${START_FROM_STEP} -le 4 ]]; then
+                print_info "Partition 2 size (bytes): ${PART2_SIZE_BYTES}"
+                print_info "Partition 2 offset (bytes): ${PART2_OFFSET_BYTES}"
+            fi
+
+            if [[ -n "${PART2_SIZE_BYTES}" && "${PART2_SIZE_BYTES}" -gt 0 && -n "${PART2_OFFSET_BYTES}" && "${PART2_OFFSET_BYTES}" -gt 0 ]] 2>/dev/null; then
                 # Total needed = offset + size of last partition + small buffer
                 # No need for large buffer since partition is already right-sized
                 NEEDED_BYTES=$((PART2_OFFSET_BYTES + PART2_SIZE_BYTES + 16 * 1024 * 1024))
@@ -556,6 +587,7 @@ if [[ ${START_FROM_STEP} -le 5 ]]; then
                 fi
             else
                 print_warning "Could not determine partition layout, using full disk size"
+                print_warning "If you ran step 1, try specifying --image-size MB manually"
                 NEEDED_MB=${DISK_SIZE_MB}
             fi
         else
