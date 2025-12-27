@@ -597,8 +597,8 @@ fi
 if [[ ${START_FROM_STEP} -le 5 ]]; then
     print_step "5" "Create the disk image"
 
-    # Check available disk space on output directory
-    OUTPUT_AVAIL_MB=$(df -BM "${OUTPUT_DIR}" | tail -1 | awk '{print $4}' | tr -d 'M')
+    # Check available disk space on output directory (macOS uses -m for megabytes)
+    OUTPUT_AVAIL_MB=$(df -m "${OUTPUT_DIR}" | tail -1 | awk '{print $4}')
     SPACE_NEEDED_MB=$((NEEDED_MB + 1024))  # Image + 1GB buffer for compression temp
 
     if [[ ${OUTPUT_AVAIL_MB} -lt ${SPACE_NEEDED_MB} ]]; then
