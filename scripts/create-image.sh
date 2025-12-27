@@ -250,42 +250,84 @@ if [[ ${START_FROM_STEP} -le 1 ]]; then
     # Run all cleanup commands in a single SSH session for reliability
     print_info "Running cleanup on Pi (this may take several minutes)..."
 
+    # Run cleanup and shrink in a single comprehensive SSH session
     ssh "${PI_USER}@${PI_HOST}" bash <<'REMOTE_SCRIPT'
 set -e
 
-echo "[1/8] Stopping LacyLights services..."
+echo "[1/6] Stopping LacyLights services..."
 sudo systemctl stop lacylights-go.service 2>/dev/null || true
 sudo systemctl stop lacylights.service 2>/dev/null || true
 
-echo "[2/8] Cleaning package manager cache..."
+echo "[2/6] Cleaning package manager cache and temp files..."
 sudo apt-get clean
-
-echo "[3/8] Removing old log files..."
 sudo rm -rf /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true
 sudo journalctl --vacuum-time=1d 2>/dev/null || true
-
-echo "[4/8] Clearing user caches..."
 rm -rf ~/.cache/* 2>/dev/null || true
 sudo rm -rf /tmp/* 2>/dev/null || true
 rm -rf ~/.thumbnails/* 2>/dev/null || true
 
-echo "[5/8] Calculating safe zeroing size..."
-# Get available space in MB, leave 100MB safety margin
+echo "[3/6] Getting disk usage..."
+USED_MB=$(df -BM / | tail -1 | awk '{print $3}' | tr -d 'M')
+echo "Used space: ${USED_MB} MB"
+
+# Calculate target size (used + 512MB headroom, rounded up to next 256MB)
+TARGET_MB=$(( ((USED_MB + 512 + 255) / 256) * 256 ))
+echo "Target filesystem size: ${TARGET_MB} MB"
+
+echo "[4/6] Shrinking filesystem..."
+# Check filesystem first
+sudo e2fsck -f -y /dev/mmcblk0p2 || true
+
+# Get minimum size
+MIN_BLOCKS=$(sudo resize2fs -P /dev/mmcblk0p2 2>&1 | grep -oP 'minimum size.*: \K[0-9]+' || echo "0")
+if [ "$MIN_BLOCKS" -gt 0 ]; then
+    MIN_MB=$((MIN_BLOCKS * 4 / 1024))
+    echo "Minimum filesystem size: ${MIN_MB} MB"
+    # Ensure target is at least minimum + buffer
+    if [ $TARGET_MB -lt $((MIN_MB + 256)) ]; then
+        TARGET_MB=$((MIN_MB + 512))
+        echo "Adjusted target to: ${TARGET_MB} MB"
+    fi
+fi
+
+# Resize filesystem
+echo "Resizing filesystem to ${TARGET_MB}M..."
+sudo resize2fs /dev/mmcblk0p2 ${TARGET_MB}M
+echo "Filesystem resized!"
+
+echo "[5/6] Shrinking partition..."
+# Get partition start sector
+ROOT_START=$(sudo fdisk -l /dev/mmcblk0 2>/dev/null | grep mmcblk0p2 | awk '{print $2}')
+if [ -z "$ROOT_START" ]; then
+    ROOT_START=1050624
+fi
+TARGET_BYTES=$((TARGET_MB * 1024 * 1024))
+TARGET_SECTORS=$((TARGET_BYTES / 512))
+END_SECTOR=$((ROOT_START + TARGET_SECTORS))
+TOTAL_MB=$((END_SECTOR * 512 / 1024 / 1024))
+
+echo "Partition will end at sector ${END_SECTOR} (total: ${TOTAL_MB} MB)"
+
+# Resize partition
+sudo parted /dev/mmcblk0 ---pretend-input-tty <<EOF
+resizepart 2 ${END_SECTOR}s
+Yes
+EOF
+echo "Partition resized!"
+
+# Now zero out free space - MUCH smaller after shrinking!
+echo "[6/6] Zeroing free space for compression..."
 AVAIL_MB=$(df -BM / | tail -1 | awk '{print $4}' | tr -d 'M')
-ZERO_MB=$((AVAIL_MB - 100))
+ZERO_MB=$((AVAIL_MB - 50))  # Leave 50MB margin
 if [ ${ZERO_MB} -gt 0 ]; then
-    echo "[6/8] Zeroing ${ZERO_MB} MB of free space for better compression..."
+    echo "Zeroing ${ZERO_MB} MB (free space in shrunk partition)..."
     sudo dd if=/dev/zero of=/zero.file bs=1M count=${ZERO_MB} status=progress 2>&1 || true
     sudo rm -f /zero.file
 else
-    echo "[6/8] Skipping zeroing (not enough free space)"
+    echo "Skipping zeroing (minimal free space)"
 fi
 
-echo "[7/8] Syncing filesystem..."
-sync
-
-echo "[8/8] Enabling filesystem auto-expand for new SD cards..."
-# Ensure raspi-config init_resize is enabled for first boot on new cards
+# Enable auto-expand for first boot
 if [ -f /boot/firmware/cmdline.txt ]; then
     CMDLINE_FILE=/boot/firmware/cmdline.txt
 elif [ -f /boot/cmdline.txt ]; then
@@ -295,124 +337,20 @@ else
 fi
 
 if [ -n "$CMDLINE_FILE" ] && ! grep -q "init_resize" "$CMDLINE_FILE" 2>/dev/null; then
-    echo "Auto-expand will be configured after shrinking"
-fi
-
-echo "Cleanup complete!"
-REMOTE_SCRIPT
-
-    if [[ $? -ne 0 ]]; then
-        print_warning "Some cleanup steps may have failed, but continuing..."
-    fi
-
-    print_success "Pi cleanup complete!"
-
-    # Get disk usage info from Pi
-    print_info "Getting disk usage information..."
-    DISK_INFO=$(ssh "${PI_USER}@${PI_HOST}" "df -BM / | tail -1")
-    USED_MB=$(echo "${DISK_INFO}" | awk '{print $3}' | tr -d 'M')
-    print_info "Used space on root partition: ${USED_MB} MB"
-
-    # Now shrink the filesystem and partition
-    print_info "Shrinking filesystem for compact image..."
-    echo ""
-    echo "This will:"
-    echo "  1. Shrink the ext4 filesystem to minimum + 512MB headroom"
-    echo "  2. Shrink the partition to match"
-    echo "  3. Enable auto-expand for when image is written to new cards"
-    echo ""
-
-    # Calculate target size (used + 512MB headroom, rounded up to next 256MB)
-    TARGET_MB=$(( ((USED_MB + 512 + 255) / 256) * 256 ))
-    print_info "Target filesystem size: ${TARGET_MB} MB (used: ${USED_MB} MB + 512MB headroom)"
-
-    # Run filesystem shrink on Pi
-    print_warning "Shrinking filesystem - DO NOT INTERRUPT..."
-
-    ssh "${PI_USER}@${PI_HOST}" bash -s -- "${TARGET_MB}" <<'SHRINK_SCRIPT'
-set -e
-TARGET_MB=$1
-
-echo "Checking filesystem before resize..."
-sudo e2fsck -f -y /dev/mmcblk0p2 || true
-
-echo "Getting minimum filesystem size..."
-# resize2fs -P shows minimum size in 4K blocks
-MIN_BLOCKS=$(sudo resize2fs -P /dev/mmcblk0p2 2>&1 | grep -oP 'minimum size.*: \K[0-9]+' || echo "0")
-if [ "$MIN_BLOCKS" -gt 0 ]; then
-    MIN_MB=$((MIN_BLOCKS * 4 / 1024))
-    echo "Minimum size: ${MIN_MB} MB"
-else
-    echo "Could not determine minimum size, using target"
-    MIN_MB=0
-fi
-
-# Ensure target is at least minimum + buffer
-if [ $TARGET_MB -lt $((MIN_MB + 256)) ]; then
-    TARGET_MB=$((MIN_MB + 512))
-    echo "Adjusted target to: ${TARGET_MB} MB"
-fi
-
-echo "Resizing filesystem to ${TARGET_MB}M..."
-sudo resize2fs /dev/mmcblk0p2 ${TARGET_MB}M
-
-echo "Filesystem resized successfully!"
-
-# Get the sector size and calculate partition end
-SECTOR_SIZE=512
-# Boot partition typically ends around sector 1050624 (512MB mark)
-# Calculate end sector for root partition
-# Target size in bytes / sector size + start sector
-ROOT_START=$(sudo fdisk -l /dev/mmcblk0 2>/dev/null | grep mmcblk0p2 | awk '{print $2}')
-if [ -z "$ROOT_START" ]; then
-    ROOT_START=1050624  # Default start for partition 2
-fi
-TARGET_BYTES=$((TARGET_MB * 1024 * 1024))
-TARGET_SECTORS=$((TARGET_BYTES / SECTOR_SIZE))
-END_SECTOR=$((ROOT_START + TARGET_SECTORS))
-
-echo "Partition info:"
-echo "  Root partition start: sector ${ROOT_START}"
-echo "  Target end: sector ${END_SECTOR}"
-echo "  Total size: $((END_SECTOR * SECTOR_SIZE / 1024 / 1024)) MB"
-
-# Use parted to resize partition (non-interactive)
-echo "Resizing partition with parted..."
-sudo parted /dev/mmcblk0 ---pretend-input-tty <<EOF
-resizepart 2 ${END_SECTOR}s
-Yes
-EOF
-
-echo "Partition resized!"
-
-# Enable auto-expand for first boot on new card
-if [ -f /boot/firmware/cmdline.txt ]; then
-    CMDLINE_FILE=/boot/firmware/cmdline.txt
-elif [ -f /boot/cmdline.txt ]; then
-    CMDLINE_FILE=/boot/cmdline.txt
-else
-    echo "Warning: Could not find cmdline.txt"
-    exit 0
-fi
-
-# Check if init_resize already present
-if ! grep -q "init_resize" "$CMDLINE_FILE" 2>/dev/null; then
-    echo "Enabling auto-expand on first boot..."
-    # Add init=/usr/lib/raspi-config/init_resize.sh to cmdline
     if [ -f /usr/lib/raspi-config/init_resize.sh ]; then
         sudo sed -i 's/$/ init=\/usr\/lib\/raspi-config\/init_resize.sh/' "$CMDLINE_FILE"
-        echo "Auto-expand enabled!"
-    else
-        echo "Warning: init_resize.sh not found, auto-expand not enabled"
+        echo "Auto-expand enabled for first boot!"
     fi
-else
-    echo "Auto-expand already enabled"
 fi
 
-# Final sync
 sync
-echo "Shrink complete!"
-SHRINK_SCRIPT
+echo ""
+echo "=== Summary ==="
+echo "Used space:      ${USED_MB} MB"
+echo "Filesystem size: ${TARGET_MB} MB"
+echo "Total image:     ${TOTAL_MB} MB"
+echo "==============="
+REMOTE_SCRIPT
 
     if [[ $? -ne 0 ]]; then
         print_error "Filesystem shrink failed!"
