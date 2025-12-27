@@ -310,28 +310,11 @@ if [ ${ZERO_MB} -gt 0 ]; then
     sudo rm -f /zero.file
 fi
 
-echo "[5/5] Enabling auto-expand for first boot..."
-# Enable auto-expand so the filesystem expands when written to a new card
-if [ -f /boot/firmware/cmdline.txt ]; then
-    CMDLINE_FILE=/boot/firmware/cmdline.txt
-elif [ -f /boot/cmdline.txt ]; then
-    CMDLINE_FILE=/boot/cmdline.txt
-else
-    CMDLINE_FILE=""
-fi
-
-if [ -n "$CMDLINE_FILE" ]; then
-    if ! grep -q "init_resize" "$CMDLINE_FILE" 2>/dev/null; then
-        if [ -f /usr/lib/raspi-config/init_resize.sh ]; then
-            sudo sed -i 's/$/ init=\/usr\/lib\/raspi-config\/init_resize.sh/' "$CMDLINE_FILE"
-            echo "Auto-expand enabled!"
-        else
-            echo "Warning: init_resize.sh not found"
-        fi
-    else
-        echo "Auto-expand already enabled"
-    fi
-fi
+echo "[5/5] Final sync..."
+# NOTE: We do NOT modify cmdline.txt here because this is the SOURCE card.
+# The init_resize for auto-expand should only be added when writing to a NEW card,
+# not on the source card which will be put back into the original Pi.
+# Raspberry Pi Imager handles filesystem expansion automatically for new cards.
 
 sync
 
@@ -740,17 +723,19 @@ fi
 echo ""
 echo "To write this image to a new SD card:"
 echo ""
-echo "  # Using Raspberry Pi Imager (recommended):"
+echo "  # Using Raspberry Pi Imager (recommended - auto-expands filesystem):"
 echo "  # 1. Open Raspberry Pi Imager"
 echo "  # 2. Choose OS -> Use custom"
 echo "  # 3. Select ${COMPRESSED_FILE}"
 echo "  # 4. Choose storage -> Select your SD card"
 echo "  # 5. Write"
 echo ""
-echo "  # Or using dd (advanced):"
+echo "  # Or using dd (advanced - requires manual filesystem expansion):"
 echo "  gunzip -c ${COMPRESSED_FILE} | sudo dd of=/dev/diskN bs=1m status=progress"
+echo "  # Then on first boot, run: sudo raspi-config --expand-rootfs && sudo reboot"
 echo ""
 
-print_action "You can now safely eject the SD card and return it to the Pi"
+print_action "You can now safely eject the SOURCE SD card and return it to the original Pi"
+echo "         (The source card is unchanged and will boot normally)"
 
 print_success "Done!"
