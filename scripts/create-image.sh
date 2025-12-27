@@ -411,18 +411,16 @@ if [[ ${START_FROM_STEP} -le 3 ]]; then
     if [[ -n "${SD_DEVICE}" ]]; then
         print_info "Using provided device: ${SD_DEVICE}"
     else
-        print_info "Scanning for removable disks..."
+        print_info "Scanning for disks..."
         echo ""
 
-        # List external/removable disks
-        DISK_LIST=$(diskutil list external 2>/dev/null || diskutil list)
-
-        echo "Available external disks:"
-        echo "${DISK_LIST}"
+        # Show all physical disks (SD cards in built-in readers show as "internal")
+        # Filter to show only physical disks, not disk images or synthesized volumes
+        echo "Physical disks (excluding virtual/synthesized):"
+        diskutil list | grep -A 20 "physical)" || diskutil list
         echo ""
 
-        # Try to auto-detect the SD card
-        # Look for disks that are external and have typical SD card sizes (8GB-128GB)
+        # Try to auto-detect the SD card by looking for Pi signatures
         DETECTED_DISK=""
         for disk in /dev/disk[0-9]*; do
             # Skip partitions, only look at whole disks
@@ -430,18 +428,44 @@ if [[ ${START_FROM_STEP} -le 3 ]]; then
                 continue
             fi
 
-            # Check if it's external/removable
             INFO=$(diskutil info "${disk}" 2>/dev/null || true)
-            if echo "${INFO}" | grep -q "Removable Media.*Yes\|External.*Yes\|Protocol.*USB\|Protocol.*SD"; then
-                SIZE_BYTES=$(echo "${INFO}" | grep "Disk Size" | head -1 | sed 's/.*(\([0-9]*\) Bytes).*/\1/' || echo "0")
-                SIZE_GB=$((SIZE_BYTES / 1024 / 1024 / 1024))
+            DISK_LIST_INFO=$(diskutil list "${disk}" 2>/dev/null || true)
 
+            # Skip virtual disks (disk images, synthesized, containers)
+            if echo "${INFO}" | grep -q "Virtual.*Yes\|Disk Image.*Yes"; then
+                continue
+            fi
+            if echo "${DISK_LIST_INFO}" | grep -q "disk image\|synthesized"; then
+                continue
+            fi
+
+            # Look for Pi SD card signatures:
+            # 1. FDisk partition scheme (MBR) with FAT32 boot + Linux partition
+            # 2. Or removable media / SD protocol
+            IS_PI_CARD=false
+
+            # Check for Pi partition layout: FDisk with FAT32 "boot" and Linux
+            if echo "${DISK_LIST_INFO}" | grep -q "FDisk_partition_scheme"; then
+                if echo "${DISK_LIST_INFO}" | grep -qi "FAT.*boot\|bootfs" && echo "${DISK_LIST_INFO}" | grep -q "Linux"; then
+                    IS_PI_CARD=true
+                fi
+            fi
+
+            # Also detect by removable media or SD protocol
+            if echo "${INFO}" | grep -q "Removable Media.*Yes\|Protocol.*SD\|Protocol.*USB"; then
+                SIZE_BYTES=$(echo "${INFO}" | grep "Disk Size" | head -1 | sed -E 's/.*\(([0-9]+) Bytes\).*/\1/' || echo "0")
+                SIZE_GB=$((SIZE_BYTES / 1024 / 1024 / 1024))
                 # Typical SD cards are 8GB to 512GB
                 if [[ ${SIZE_GB} -ge 4 && ${SIZE_GB} -le 512 ]]; then
-                    DISK_NAME=$(basename "${disk}")
-                    print_info "Detected potential SD card: ${disk} (${SIZE_GB} GB)"
-                    DETECTED_DISK="${disk}"
+                    IS_PI_CARD=true
                 fi
+            fi
+
+            if [[ "${IS_PI_CARD}" == "true" ]]; then
+                SIZE_BYTES=$(echo "${INFO}" | grep "Disk Size" | head -1 | sed -E 's/.*\(([0-9]+) Bytes\).*/\1/' || echo "0")
+                SIZE_GB=$((SIZE_BYTES / 1024 / 1024 / 1024))
+                print_info "Detected potential Pi SD card: ${disk} (${SIZE_GB} GB)"
+                DETECTED_DISK="${disk}"
             fi
         done
 
