@@ -7,7 +7,7 @@
 #   1. Prepare Pi   - SSH to Pi, stop services, clean caches, zero free space
 #   2. Shutdown Pi  - Safely shut down Pi, prompt to transfer SD card to Mac
 #   3. Detect SD    - Auto-detect SD card device on Mac
-#   4. Calculate    - Analyze partitions, calculate optimal image size
+#   4. Review       - Show disk information before imaging
 #   5. Create image - Use dd to create raw disk image
 #   6. Compress     - Compress image with gzip -9
 
@@ -95,8 +95,6 @@ OUTPUT_DIR="${OUTPUT_DIR:-$HOME/Desktop}"
 IMAGE_NAME="${IMAGE_NAME:-lacylights}"
 START_FROM_STEP="${START_FROM_STEP:-1}"
 SD_DEVICE="${SD_DEVICE:-}"
-IMAGE_SIZE_MB="${IMAGE_SIZE_MB:-}"  # Manual override for image size
-BUFFER_MB=512  # Extra space buffer in MB
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -125,10 +123,6 @@ while [[ $# -gt 0 ]]; do
             SD_DEVICE="$2"
             shift 2
             ;;
-        --image-size)
-            IMAGE_SIZE_MB="$2"
-            shift 2
-            ;;
         --help)
             echo "LacyLights SD Card Image Creation Script"
             echo ""
@@ -138,7 +132,7 @@ while [[ $# -gt 0 ]]; do
             echo "  1. Prepare Pi   - SSH to Pi, stop services, clean caches, zero free space"
             echo "  2. Shutdown Pi  - Safely shut down Pi, prompt to transfer SD card to Mac"
             echo "  3. Detect SD    - Auto-detect SD card device on Mac"
-            echo "  4. Calculate    - Analyze partitions, calculate optimal image size"
+            echo "  4. Review       - Show disk information before imaging"
             echo "  5. Create image - Use dd to create raw disk image"
             echo "  6. Compress     - Compress image with gzip -9"
             echo ""
@@ -149,7 +143,6 @@ while [[ $# -gt 0 ]]; do
             echo "  --name NAME            Image base name (default: lacylights)"
             echo "  --start-from-step N    Start from step N, skipping earlier steps (1-6)"
             echo "  --device /dev/diskN    SD card device (skips auto-detection if provided)"
-            echo "  --image-size MB        Override image size in MB (use when resuming from step 3+)"
             echo "  --help                 Show this help message"
             echo ""
             echo "Environment Variables:"
@@ -159,7 +152,6 @@ while [[ $# -gt 0 ]]; do
             echo "  IMAGE_NAME           Same as --name"
             echo "  START_FROM_STEP      Same as --start-from-step"
             echo "  SD_DEVICE            Same as --device"
-            echo "  IMAGE_SIZE_MB        Same as --image-size"
             echo ""
             echo "Examples:"
             echo "  $0                                    # Full process from step 1"
@@ -167,7 +159,6 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --start-from-step 3                # Skip Pi steps, start at SD detection"
             echo "  $0 --start-from-step 3 --device /dev/disk8  # Skip to step 3 with known device"
             echo "  $0 --start-from-step 5 --device /dev/disk8  # Just create and compress image"
-            echo "  $0 --start-from-step 4 --device /dev/disk8 --image-size 7168  # Resume with known size"
             echo ""
             exit 0
             ;;
@@ -194,9 +185,6 @@ echo "  Image Name:     ${IMAGE_NAME}-${TIMESTAMP}.img.gz"
 echo "  Start from:     Step ${START_FROM_STEP}"
 if [[ -n "${SD_DEVICE}" ]]; then
 echo "  SD Device:      ${SD_DEVICE}"
-fi
-if [[ -n "${IMAGE_SIZE_MB}" ]]; then
-echo "  Image Size:     ${IMAGE_SIZE_MB} MB (manual override)"
 fi
 echo ""
 
@@ -544,110 +532,27 @@ if [[ ${START_FROM_STEP} -le 3 ]]; then
 fi
 
 # ============================================================================
-# STEP 4: Calculate optimal image size
+# STEP 4: Show disk information
 # ============================================================================
-# Always calculate size if we need to create the image (step 5)
-if [[ ${START_FROM_STEP} -le 5 ]]; then
-    if [[ ${START_FROM_STEP} -le 4 ]]; then
-        print_step "4" "Calculate optimal image size"
-        print_info "Analyzing partition layout..."
-    fi
+if [[ ${START_FROM_STEP} -le 4 ]]; then
+    print_step "4" "Review disk information"
 
     # Get partition info from macOS
     PART_INFO=$(diskutil list "${SD_DEVICE}")
-    if [[ ${START_FROM_STEP} -le 4 ]]; then
-        echo "${PART_INFO}"
-        echo ""
-    fi
+    echo "${PART_INFO}"
+    echo ""
 
-    # Priority order for image size:
-    # 1. Manual override via --image-size
-    # 2. Calculated size from step 1 (SHRUNK_SIZE_MB)
-    # 3. Fall back to reading partition info from macOS
-    if [[ -n "${IMAGE_SIZE_MB}" && ${IMAGE_SIZE_MB} -gt 0 ]]; then
-        NEEDED_MB=${IMAGE_SIZE_MB}
-        if [[ ${START_FROM_STEP} -le 4 ]]; then
-            print_info "Using manual override image size: ${NEEDED_MB} MB"
-        fi
-    elif [[ -n "${SHRUNK_SIZE_MB}" && ${SHRUNK_SIZE_MB} -gt 0 ]]; then
-        NEEDED_MB=${SHRUNK_SIZE_MB}
-        if [[ ${START_FROM_STEP} -le 4 ]]; then
-            print_info "Using calculated partition size from step 1: ${NEEDED_MB} MB"
-        fi
-    else
-        # Fall back to reading partition info from macOS
-        # Note: This reads the partition table, which should reflect any shrinking done on the Pi
-
-        # For a typical Pi SD card, we have:
-        #   - Partition 1: boot (FAT32, ~256MB)
-        #   - Partition 2: root (ext4, varies)
-
-        # Get the size of partition 2 (main Linux partition)
-        PARTITION_2="${SD_DEVICE}s2"
-        if [[ -e "${PARTITION_2}" ]]; then
-            PART2_INFO=$(diskutil info "${PARTITION_2}" 2>/dev/null || true)
-
-            # macOS diskutil format: "Disk Size:                 127.5 GB (127461941248 Bytes)..."
-            # Extract the bytes value from parentheses
-            PART2_SIZE_BYTES=$(echo "${PART2_INFO}" | grep "Disk Size" | head -1 | sed -E 's/.*\(([0-9]+) Bytes\).*/\1/' || echo "0")
-
-            # macOS diskutil format: "Partition Offset:          545259520 Bytes (1064960 512-Byte...)"
-            # Extract the bytes value before "Bytes"
-            PART2_OFFSET_BYTES=$(echo "${PART2_INFO}" | grep "Partition Offset" | head -1 | awk '{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/ && $(i+1) == "Bytes") print $i}' || echo "0")
-
-            # Debug output
-            if [[ ${START_FROM_STEP} -le 4 ]]; then
-                print_info "Partition 2 size (bytes): ${PART2_SIZE_BYTES}"
-                print_info "Partition 2 offset (bytes): ${PART2_OFFSET_BYTES}"
-            fi
-
-            if [[ -n "${PART2_SIZE_BYTES}" && "${PART2_SIZE_BYTES}" -gt 0 && -n "${PART2_OFFSET_BYTES}" && "${PART2_OFFSET_BYTES}" -gt 0 ]] 2>/dev/null; then
-                # Total needed = offset + size of last partition + small buffer
-                # No need for large buffer since partition is already right-sized
-                NEEDED_BYTES=$((PART2_OFFSET_BYTES + PART2_SIZE_BYTES + 16 * 1024 * 1024))
-                NEEDED_MB=$((NEEDED_BYTES / 1024 / 1024))
-
-                if [[ ${START_FROM_STEP} -le 4 ]]; then
-                    print_info "Partition 2 offset: $((PART2_OFFSET_BYTES / 1024 / 1024)) MB"
-                    print_info "Partition 2 size: $((PART2_SIZE_BYTES / 1024 / 1024)) MB"
-                    print_info "Calculated image size needed: ${NEEDED_MB} MB"
-                fi
-            else
-                print_warning "Could not determine partition layout, using full disk size"
-                print_warning "If you ran step 1, try specifying --image-size MB manually"
-                NEEDED_MB=${DISK_SIZE_MB}
-            fi
-        else
-            print_warning "Could not find partition 2, using full disk size"
-            NEEDED_MB=${DISK_SIZE_MB}
-        fi
-    fi
-
-    # Cap at actual disk size
-    if [[ ${NEEDED_MB} -gt ${DISK_SIZE_MB} ]]; then
-        NEEDED_MB=${DISK_SIZE_MB}
-    fi
-
-    # Safety check: warn if image is still very large
-    if [[ ${NEEDED_MB} -gt 20000 ]]; then
-        print_warning "Image size is ${NEEDED_MB} MB (over 20GB)"
-        echo ""
-        echo "If you expected a smaller image, the partition may not have been shrunk."
-        echo "To create a compact image, run the full process from step 1 which will"
-        echo "shrink the filesystem and partition on the Pi before imaging."
-        echo ""
-        read -p "Continue with ${NEEDED_MB} MB image? [y/N]: " CONTINUE_LARGE
-        if [[ "${CONTINUE_LARGE}" != "y" && "${CONTINUE_LARGE}" != "Y" ]]; then
-            exit 1
-        fi
-    fi
-
-    if [[ ${START_FROM_STEP} -le 4 ]]; then
-        echo ""
-        echo "Image will capture: ${NEEDED_MB} MB of ${DISK_SIZE_MB} MB total"
-        echo "Output file: ${IMAGE_FILE}"
-        echo ""
-    fi
+    print_info "Full disk size: ${DISK_SIZE_MB} MB (${DISK_SIZE_GB} GB)"
+    echo ""
+    echo "The script will copy the FULL disk to ensure all data is captured."
+    echo "ext4 filesystems don't store data contiguously, so partial copies"
+    echo "would corrupt files stored beyond the cutoff point."
+    echo ""
+    echo "The raw image will be ${DISK_SIZE_MB} MB, but after gzip compression"
+    echo "(with zeroed free space) the final .img.gz will be ~2-3GB."
+    echo ""
+    echo "Output file: ${IMAGE_FILE}.gz"
+    echo ""
 fi
 
 # ============================================================================
@@ -657,13 +562,17 @@ if [[ ${START_FROM_STEP} -le 5 ]]; then
     print_step "5" "Create the disk image"
 
     # Check available disk space on output directory (macOS uses -m for megabytes)
+    # Need space for full disk image temporarily (compression happens after)
     OUTPUT_AVAIL_MB=$(df -m "${OUTPUT_DIR}" | tail -1 | awk '{print $4}')
-    SPACE_NEEDED_MB=$((NEEDED_MB + 1024))  # Image + 1GB buffer for compression temp
+    SPACE_NEEDED_MB=$((DISK_SIZE_MB + 1024))  # Full disk image + buffer
 
     if [[ ${OUTPUT_AVAIL_MB} -lt ${SPACE_NEEDED_MB} ]]; then
         print_error "Insufficient disk space in ${OUTPUT_DIR}"
         echo "  Available: ${OUTPUT_AVAIL_MB} MB"
-        echo "  Needed:    ${SPACE_NEEDED_MB} MB (image + compression buffer)"
+        echo "  Needed:    ${SPACE_NEEDED_MB} MB (full disk image + buffer)"
+        echo ""
+        echo "  NOTE: The raw image will be ${DISK_SIZE_MB} MB but compresses to ~2-3GB"
+        echo "  You need enough space for the uncompressed image during creation."
         exit 1
     fi
     print_info "Disk space check passed: ${OUTPUT_AVAIL_MB} MB available, ${SPACE_NEEDED_MB} MB needed"
@@ -674,17 +583,22 @@ if [[ ${START_FROM_STEP} -le 5 ]]; then
     print_warning "Creating image - this will take several minutes"
     echo "Source: ${RAW_DEVICE}"
     echo "Target: ${IMAGE_FILE}"
-    echo "Size: ${NEEDED_MB} MB"
+    echo "Size: ${DISK_SIZE_MB} MB (full disk)"
+    echo ""
+    echo "NOTE: We copy the FULL disk because ext4 doesn't store data contiguously."
+    echo "      Files can be anywhere in the partition, so partial copies cause corruption."
+    echo "      The gzip compression will make the final file small (~2-3GB) since"
+    echo "      we zeroed free space during Pi preparation."
     echo ""
 
     # Track for cleanup if interrupted
     PARTIAL_IMAGE_FILE="${IMAGE_FILE}"
 
-    # Calculate block count (1MB blocks)
-    BLOCK_COUNT=${NEEDED_MB}
-
-    # Create the image
-    if ! sudo dd if="${RAW_DEVICE}" of="${IMAGE_FILE}" bs=1m count="${BLOCK_COUNT}" status=progress; then
+    # IMPORTANT: Copy the FULL disk, not just a portion
+    # ext4 filesystems allocate blocks throughout the partition, not contiguously from the start.
+    # Using count=N to copy only part of the disk will corrupt files stored beyond that point.
+    # The zeroing of free space during Pi prep ensures the compressed image is small.
+    if ! sudo dd if="${RAW_DEVICE}" of="${IMAGE_FILE}" bs=1m status=progress; then
         print_error "Failed to create disk image"
         exit 1
     fi
