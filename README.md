@@ -701,6 +701,38 @@ sudo chown lacylights:lacylights /opt/lacylights/backend/prisma/lacylights.db
 sudo systemctl start lacylights
 ```
 
+## Creating Distributable Images
+
+Once you have a working LacyLights installation, you can create compressed SD card images for deploying to new devices.
+
+### Important: Use the Right SD Card Size
+
+**For creating master images, use a 16GB or 32GB SD card.** The imaging process copies the entire card, so:
+
+| Card Size | Imaging Time | Recommendation |
+|-----------|--------------|----------------|
+| 16GB      | ~10 min      | **Recommended** |
+| 32GB      | ~20 min      | Good balance |
+| 128GB     | ~80 min      | Too slow |
+
+The compressed image (~2-3GB) can be written to any card 16GB or larger.
+
+### Quick Start
+
+```bash
+# Create an image from a working Pi (on your Mac)
+./scripts/create-image.sh
+```
+
+The script will guide you through:
+1. Preparing the Pi (stop services, zero free space)
+2. Shutting down and transferring the SD card
+3. Creating and compressing the image
+
+**Output:** `~/Desktop/lacylights-YYYYMMDD-HHMMSS.img.gz`
+
+📖 **See [docs/IMAGE_CREATION.md](docs/IMAGE_CREATION.md) for the complete guide**
+
 ## Contributing
 
 This is a deployment repository. For application code contributions:
@@ -740,6 +772,9 @@ Once configured, create releases via GitHub Actions:
 - **Configuration:**
   - [WIFI_SETUP.md](docs/WIFI_SETUP.md) - WiFi configuration
   - [config/.env.example](config/.env.example) - Environment variables
+
+- **Distribution:**
+  - [IMAGE_CREATION.md](docs/IMAGE_CREATION.md) - Creating distributable SD card images
 
 - **Maintenance:**
   - [UPDATING.md](docs/UPDATING.md) - System updates
