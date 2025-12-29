@@ -19,8 +19,12 @@ if [ ! -x "$UPDATE_SCRIPT" ]; then
     exit 1
 fi
 
-# Ensure log directory exists
+# Ensure log directory and file exist with correct ownership
+# The script runs as root (via systemd-run), but the lacylights user needs write access
 mkdir -p "$(dirname "$LOG_FILE")"
+touch "$LOG_FILE"
+chown lacylights:lacylights "$(dirname "$LOG_FILE")" "$LOG_FILE" 2>/dev/null || true
+chmod 664 "$LOG_FILE" 2>/dev/null || true
 
 # Validate number of arguments
 if [ $# -lt 1 ]; then

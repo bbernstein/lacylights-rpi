@@ -836,6 +836,7 @@ except Exception as e:
 
         # Deploy frontend to frontend-src directory where the systemd service runs
         local frontend_dir="$LACYLIGHTS_ROOT/frontend-src"
+        local frontend_backup_file=""
 
         # Create directory if it doesn't exist
         if [ ! -d "$frontend_dir" ]; then
@@ -846,6 +847,41 @@ except Exception as e:
                 return 1
             fi
         fi
+
+        # Create a backup of frontend-src BEFORE clearing it
+        # This ensures we can restore the working frontend if deployment fails
+        if [ -d "$frontend_dir" ] && [ -n "$(ls -A "$frontend_dir" 2>/dev/null)" ]; then
+            local fe_timestamp=$(date +"%Y%m%d_%H%M%S")
+            frontend_backup_file="$BACKUP_DIR/frontend-src_backup_${fe_timestamp}.tar.gz"
+            print_status "Creating backup of frontend-src at $frontend_backup_file..."
+            if ! tar -czf "$frontend_backup_file" -C "$(dirname "$frontend_dir")" "$(basename "$frontend_dir")"; then
+                print_warning "Failed to create frontend-src backup, continuing without backup"
+                frontend_backup_file=""
+            fi
+        fi
+
+        # Helper function to restore frontend-src from backup
+        restore_frontend() {
+            if [ -n "$frontend_backup_file" ] && [ -f "$frontend_backup_file" ]; then
+                print_status "Restoring frontend-src from backup..."
+                # Safety check
+                if [[ ! "$frontend_dir" =~ ^/opt/lacylights/ ]] || [ "$frontend_dir" = "/" ] || [ -z "$frontend_dir" ]; then
+                    print_error "Invalid frontend directory path: $frontend_dir"
+                    return 1
+                fi
+                # Clear and restore
+                find "$frontend_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+                if tar -xzf "$frontend_backup_file" -C "$(dirname "$frontend_dir")" --strip-components=0; then
+                    print_success "Frontend-src restored from backup"
+                    # Restart the frontend service
+                    sudo systemctl start lacylights-frontend || true
+                else
+                    print_error "Failed to restore frontend-src from backup"
+                fi
+            else
+                print_warning "No frontend-src backup available, cannot restore previous state"
+            fi
+        }
 
         print_status "Deploying frontend to frontend-src directory..."
         # Ensure directory has proper group ownership and permissions
@@ -858,11 +894,13 @@ except Exception as e:
         # Safety check: Only allow deletion if frontend_dir is within /opt/lacylights/
         if [[ ! "$frontend_dir" =~ ^/opt/lacylights/ ]] || [ "$frontend_dir" = "/" ] || [ -z "$frontend_dir" ]; then
             print_error "Invalid frontend directory path: $frontend_dir"
+            restore_frontend
             restore_from_backup "$backup_file" "$repo_name"
             return 1
         fi
         if ! find "$frontend_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +; then
             print_error "Failed to remove old frontend files"
+            restore_frontend
             restore_from_backup "$backup_file" "$repo_name"
             return 1
         fi
@@ -877,6 +915,7 @@ except Exception as e:
             if [ ! -d "$frontend_dir/.next" ]; then
                 print_error "Frontend archive missing .next directory - invalid release"
                 print_error "The fe-server release should include a pre-built .next directory"
+                restore_frontend
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
@@ -885,6 +924,7 @@ except Exception as e:
             if [ ! -d "$frontend_dir/node_modules" ]; then
                 print_error "Frontend archive missing node_modules directory - invalid release"
                 print_error "The fe-server release should include node_modules"
+                restore_frontend
                 restore_from_backup "$backup_file" "$repo_name"
                 return 1
             fi
@@ -900,9 +940,13 @@ except Exception as e:
                 print_warning "package.json not found in $frontend_dir; frontend version unknown"
             fi
 
+            # Clean up frontend backup on success (keep for a while in case needed)
+            # Note: We don't delete it immediately to allow manual recovery if needed
+
             print_success "Frontend deployed to $frontend_dir (v$fe_version)"
         else
             print_error "Failed to copy frontend to frontend-src directory"
+            restore_frontend
             restore_from_backup "$backup_file" "$repo_name"
             return 1
         fi
