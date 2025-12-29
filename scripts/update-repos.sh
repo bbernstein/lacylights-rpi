@@ -873,13 +873,28 @@ except Exception as e:
                 find "$frontend_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
                 if tar -xzf "$frontend_backup_file" -C "$(dirname "$frontend_dir")" --strip-components=0; then
                     print_success "Frontend-src restored from backup"
-                    # Restart the frontend service
-                    sudo systemctl start lacylights-frontend || true
+                    # Restart the frontend service (use restart to ensure clean state)
+                    if ! sudo systemctl restart lacylights-frontend; then
+                        print_warning "Failed to restart frontend service after restoration"
+                    fi
                 else
                     print_error "Failed to restore frontend-src from backup"
                 fi
             else
                 print_warning "No frontend-src backup available, cannot restore previous state"
+            fi
+        }
+
+        # Helper function to clean up old frontend backups (keep last 3)
+        cleanup_old_frontend_backups() {
+            local backup_pattern="$BACKUP_DIR/frontend-src_backup_*.tar.gz"
+            local backup_count
+            backup_count=$(find "$BACKUP_DIR" -name "frontend-src_backup_*.tar.gz" 2>/dev/null | wc -l)
+            if [ "$backup_count" -gt 3 ]; then
+                print_status "Cleaning up old frontend backups (keeping last 3)..."
+                # Sort by timestamp (oldest first) and remove all but the last 3
+                find "$BACKUP_DIR" -name "frontend-src_backup_*.tar.gz" -printf '%T+ %p\n' 2>/dev/null | \
+                    sort | head -n -3 | cut -d' ' -f2- | xargs rm -f 2>/dev/null || true
             fi
         }
 
@@ -940,8 +955,8 @@ except Exception as e:
                 print_warning "package.json not found in $frontend_dir; frontend version unknown"
             fi
 
-            # Clean up frontend backup on success (keep for a while in case needed)
-            # Note: We don't delete it immediately to allow manual recovery if needed
+            # Clean up old frontend backups (keep last 3 for manual recovery if needed)
+            cleanup_old_frontend_backups
 
             print_success "Frontend deployed to $frontend_dir (v$fe_version)"
         else

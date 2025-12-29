@@ -365,7 +365,7 @@ else
 fi
 
 # Ensure update.log exists with correct ownership for version management
-sudo -u lacylights touch /opt/lacylights/logs/update.log 2>/dev/null || sudo touch /opt/lacylights/logs/update.log
+sudo touch /opt/lacylights/logs/update.log
 sudo chown lacylights:lacylights /opt/lacylights/logs/update.log
 sudo chmod 664 /opt/lacylights/logs/update.log
 echo "[INFO] Update log file ready with correct permissions"
