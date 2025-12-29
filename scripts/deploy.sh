@@ -364,6 +364,12 @@ else
     echo "[INFO] Logs directory exists (ownership verified)"
 fi
 
+# Ensure update.log exists with correct ownership for version management
+sudo touch /opt/lacylights/logs/update.log
+sudo chown lacylights:lacylights /opt/lacylights/logs/update.log
+sudo chmod 664 /opt/lacylights/logs/update.log
+echo "[INFO] Update log file ready with correct permissions"
+
 # Backups directory (owned by lacylights for version management rollbacks)
 if [ ! -d "/opt/lacylights/backups" ]; then
     sudo mkdir -p /opt/lacylights/backups

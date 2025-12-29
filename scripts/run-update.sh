@@ -19,8 +19,19 @@ if [ ! -x "$UPDATE_SCRIPT" ]; then
     exit 1
 fi
 
-# Ensure log directory exists
+# Ensure log directory and file exist with correct ownership
+# The script runs as root (via systemd-run), but the lacylights user needs write access
 mkdir -p "$(dirname "$LOG_FILE")"
+# Create log file if it doesn't exist, with fallback to sudo if needed
+if ! touch "$LOG_FILE" 2>/dev/null; then
+    # If touch fails (e.g., permission denied), we're likely not root yet
+    echo "Warning: Could not create log file, proceeding without logging" >&2
+fi
+# Set ownership - if we can't chown, log a warning but continue
+if ! chown lacylights:lacylights "$(dirname "$LOG_FILE")" "$LOG_FILE" 2>/dev/null; then
+    echo "Warning: Could not set log file ownership" >&2
+fi
+chmod 664 "$LOG_FILE" 2>/dev/null || true
 
 # Validate number of arguments
 if [ $# -lt 1 ]; then
