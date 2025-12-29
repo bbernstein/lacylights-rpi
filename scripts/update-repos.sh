@@ -836,6 +836,8 @@ except Exception as e:
 
         # Deploy frontend to frontend-src directory where the systemd service runs
         local frontend_dir="$LACYLIGHTS_ROOT/frontend-src"
+        # Note: frontend_backup_file is used by restore_frontend() below.
+        # Bash nested functions inherit parent scope, so this variable is accessible.
         local frontend_backup_file=""
 
         # Create directory if it doesn't exist
@@ -1202,8 +1204,8 @@ except Exception as e:
             fi
             ;;
         lacylights-fe)
-            # Use || true to prevent script exit on start failure
-            sudo systemctl start lacylights-frontend || true
+            # Use restart to ensure new code is loaded; || true to prevent script exit on failure
+            sudo systemctl restart lacylights-frontend || true
             # Retry with exponential backoff to allow service time to start
             local retry_count=0
             local max_retries=5
