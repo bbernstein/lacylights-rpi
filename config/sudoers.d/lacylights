@@ -78,25 +78,24 @@ lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacyli
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/backend
 
 # Frontend and MCP directories (recursive for deployment)
+# The -R flag handles all subdirectories, so no /* variant is needed
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/frontend-src
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/frontend-src/*
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/mcp
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/mcp/*
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/.npm-cache
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/.npm-cache/*
 
 # npm cache in home directory
+# Note: Script uses numeric UIDs, so we allow [0-9]*:[0-9]* pattern for security
+# (prevents arbitrary user:group but allows any numeric UID:GID)
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /home/lacylights/.npm
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /home/lacylights/.npm
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /home/lacylights/.npm/*
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R *\:* /home/lacylights/.npm
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R [0-9]*\:[0-9]* /home/lacylights/.npm
 
 # Allow chmod for setting permissions during updates
+# g+w: group write permission for shared access between pi and lacylights users
+# g+s: setgid bit ensures new files inherit the lacylights group ownership
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/frontend-src
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/frontend-src/*
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod g+s /opt/lacylights/frontend-src
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/mcp
-lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/mcp/*
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod g+s /opt/lacylights/mcp
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/.npm-cache
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod g+s /opt/lacylights/.npm-cache
