@@ -63,8 +63,45 @@ lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active --quiet lacylights-frontend
 
+# Allow systemd-run for self-updates (needed because lacylights service has NoNewPrivileges=true)
+# Security: Fixed unit names, timing arguments, and only allows validated run-update.sh script
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-self-update --description=* --on-active=3s --timer-property=AccuracySec=100ms /opt/lacylights/scripts/run-update.sh *
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemd-run --unit=lacylights-mcp-update --description=* --on-active=3s --timer-property=AccuracySec=100ms /opt/lacylights/scripts/run-update.sh *
+
+# Allow systemctl daemon-reload for service updates
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+
 # Allow chown for setting file ownership during updates
-# Specific paths for Go backend binary and backend directory
+# Backend binary and directory
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/repos/lacylights-go/lacylights-server
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/backend/lacylights-server
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/backend
+
+# Frontend and MCP directories (recursive for deployment)
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/frontend-src
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/frontend-src/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/mcp
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/mcp/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/.npm-cache
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/.npm-cache/*
+
+# npm cache in home directory
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /home/lacylights/.npm
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /home/lacylights/.npm
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /home/lacylights/.npm/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R *\:* /home/lacylights/.npm
+
+# Allow chmod for setting permissions during updates
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/frontend-src
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/frontend-src/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod g+s /opt/lacylights/frontend-src
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/mcp
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/mcp/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod g+s /opt/lacylights/mcp
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/.npm-cache
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod g+s /opt/lacylights/.npm-cache
+
+# Allow mkdir for creating directories during updates
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/lacylights/frontend-src
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/lacylights/mcp
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/lacylights/.npm-cache
