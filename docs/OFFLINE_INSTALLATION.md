@@ -37,8 +37,7 @@ cd /path/to/lacylights-rpi
 # Use specific versions
 ./scripts/prepare-offline.sh \
     --backend-version v1.1.0 \
-    --frontend-version v0.2.0 \
-    --mcp-version v0.1.0
+    --frontend-version v0.2.0
 
 # Custom output directory
 ./scripts/prepare-offline.sh --output /tmp/my-bundle
@@ -168,9 +167,7 @@ lacylights-offline-bundle/
 │   ├── backend.tar.gz              # Backend source code
 │   ├── backend-node_modules.tar.gz # Pre-downloaded dependencies
 │   ├── frontend.tar.gz             # Frontend source code
-│   ├── frontend-node_modules.tar.gz
-│   ├── mcp.tar.gz                  # MCP server source code
-│   └── mcp-node_modules.tar.gz
+│   └── frontend-node_modules.tar.gz
 ├── npm-cache/                      # Complete npm cache (unused, backup)
 ├── bundle-info.json                # Version metadata
 └── install-from-bundle.sh          # Installation helper

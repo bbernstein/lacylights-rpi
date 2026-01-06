@@ -16,7 +16,7 @@ This guide walks you through setting up LacyLights on a fresh Raspberry Pi from 
 - **Development machine** (macOS, Linux, or Windows with WSL)
 - **lacylights-rpi** repository cloned locally (deployment tools)
 
-**Note:** Other repositories (backend, frontend, MCP) are cloned directly from GitHub to the Pi during setup.
+**Note:** Application repositories (backend, frontend) are downloaded directly from GitHub to the Pi during setup.
 
 ### Network
 - Local network with DHCP
@@ -36,8 +36,7 @@ cd lacylights-rpi
 # Or specify specific versions:
 ./scripts/setup-new-pi.sh pi@raspberrypi.local \
     --backend-version v1.1.0 \
-    --frontend-version v0.2.0 \
-    --mcp-version v1.0.0
+    --frontend-version v0.2.0
 ```
 
 This one command will:
@@ -218,9 +217,6 @@ mv lacylights-go-* /opt/lacylights/backend
 curl -L https://github.com/bbernstein/lacylights-fe/archive/refs/tags/v0.2.0.tar.gz | tar -xz
 mv lacylights-fe-* /opt/lacylights/frontend-src
 
-curl -L https://github.com/bbernstein/lacylights-mcp/archive/refs/tags/v1.0.0.tar.gz | tar -xz
-mv lacylights-mcp-* /opt/lacylights/mcp
-
 # Or for main branch:
 # curl -L https://github.com/bbernstein/lacylights-go/archive/refs/heads/main.tar.gz | tar -xz
 ```
@@ -240,11 +236,6 @@ npx prisma migrate deploy
 
 # Build frontend
 cd /opt/lacylights/frontend-src
-npm install
-npm run build
-
-# Build MCP server
-cd /opt/lacylights/mcp
 npm install
 npm run build
 ```
@@ -271,7 +262,6 @@ LacyLights uses an intelligent dual-network configuration:
 
 2. **WiFi (wlan0)** - External internet access (optional)
    - Connect to any WiFi network via web interface
-   - Used by MCP server to reach AI models
    - Used for system updates and GitHub access
    - **Routing:** Automatically becomes primary internet gateway when connected
 
@@ -509,8 +499,7 @@ Default settings should work well. If you experience issues:
 May require adjustments:
 
 1. Reduce memory limits in systemd service
-2. Disable MCP server if not needed
-3. Consider reducing Art-Net refresh rate
+2. Consider reducing Art-Net refresh rate
 
 ## Next Steps
 

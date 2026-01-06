@@ -9,7 +9,6 @@
 # Options:
 #   --backend-version TAG     Git tag/branch for backend (default: latest release)
 #   --frontend-version TAG    Git tag/branch for frontend (default: latest release)
-#   --mcp-version TAG         Git tag/branch for MCP server (default: latest release)
 #   --skip-wifi               Skip WiFi configuration prompts
 #   --wifi-ssid SSID          WiFi network name
 #   --wifi-password PASSWORD  WiFi password
@@ -55,7 +54,6 @@ SETUP_DIR="$(dirname "$SCRIPT_DIR")"
 # Parse command line arguments
 BACKEND_VERSION=""
 FRONTEND_VERSION=""
-MCP_VERSION=""
 SKIP_WIFI=false
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"
@@ -68,10 +66,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --frontend-version)
             FRONTEND_VERSION="$2"
-            shift 2
-            ;;
-        --mcp-version)
-            MCP_VERSION="$2"
             shift 2
             ;;
         --wifi-ssid)
@@ -96,7 +90,6 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --backend-version TAG     Git tag/branch for backend (default: latest release)"
             echo "  --frontend-version TAG    Git tag/branch for frontend (default: latest release)"
-            echo "  --mcp-version TAG         Git tag/branch for MCP server (default: latest release)"
             echo "  --wifi-ssid SSID          WiFi network name"
             echo "  --wifi-password PASSWORD  WiFi password"
             echo "  --skip-wifi               Skip WiFi configuration"
@@ -154,7 +147,7 @@ bash "$SETUP_DIR/setup/05-service-install.sh"
 print_header "Step 6/7: Deploying LacyLights Applications"
 
 # Create deployment directories
-mkdir -p /opt/lacylights/{backend,frontend-src,mcp}
+mkdir -p /opt/lacylights/{backend,frontend-src}
 
 # Function to get latest release tag from GitHub
 # Helper function to extract version from URL or HTML
@@ -205,12 +198,6 @@ if [ -z "$FRONTEND_VERSION" ]; then
     print_info "Fetching latest frontend version..."
     FRONTEND_VERSION=$(get_latest_release "lacylights-fe")
     print_info "Using frontend version: $FRONTEND_VERSION"
-fi
-
-if [ -z "$MCP_VERSION" ]; then
-    print_info "Fetching latest MCP version..."
-    MCP_VERSION=$(get_latest_release "lacylights-mcp")
-    print_info "Using MCP version: $MCP_VERSION"
 fi
 
 # Deploy Go Backend
@@ -315,48 +302,10 @@ print_success "Frontend build completed successfully"
 
 print_success "Frontend deployed successfully"
 
-# Deploy MCP Server
-print_info "Deploying MCP server ($MCP_VERSION)..."
-cd /opt/lacylights/mcp
-if [ "$MCP_VERSION" = "main" ]; then
-    curl -fsSL "https://github.com/bbernstein/lacylights-mcp/archive/refs/heads/main.tar.gz" | tar xz --strip-components=1
-else
-    curl -fsSL "https://github.com/bbernstein/lacylights-mcp/archive/refs/tags/${MCP_VERSION}.tar.gz" | tar xz --strip-components=1
-fi
-
-# Set ownership before installing dependencies
-chown -R pi:pi /opt/lacylights/mcp
-
-# Install MCP dependencies (including dev dependencies for build)
-print_info "Installing MCP dependencies..."
-sudo -u pi npm ci
-
-# Build MCP
-print_info "Building MCP server..."
-if ! sudo -u pi bash -c 'cd /opt/lacylights/mcp && export PATH="./node_modules/.bin:$PATH" && npm run build'; then
-    print_error "MCP build failed"
-    exit 1
-fi
-
-# Verify build output exists
-if [ ! -d /opt/lacylights/mcp/dist ]; then
-    print_error "MCP build output (dist directory) not found"
-    exit 1
-fi
-
-print_success "MCP build completed successfully"
-
-# Remove dev dependencies after build to save space
-print_info "Removing dev dependencies..."
-sudo -u pi npm prune --omit=dev
-
-print_success "MCP server deployed successfully"
-
 # Set correct ownership
 # Backend runs as lacylights user, frontend runs as pi user
 chown -R lacylights:lacylights /opt/lacylights/backend
 chown -R pi:pi /opt/lacylights/frontend-src
-chown -R pi:pi /opt/lacylights/mcp
 
 # Note: Go backend doesn't require database migrations - handled automatically
 print_info "Go backend handles database setup automatically on startup"
@@ -374,11 +323,6 @@ fi
 if [ ! -L /opt/lacylights/repos/lacylights-fe ]; then
     print_info "Creating symlink: lacylights-fe -> frontend-src"
     ln -sf /opt/lacylights/frontend-src /opt/lacylights/repos/lacylights-fe
-fi
-
-if [ ! -L /opt/lacylights/repos/lacylights-mcp ]; then
-    print_info "Creating symlink: lacylights-mcp -> mcp"
-    ln -sf /opt/lacylights/mcp /opt/lacylights/repos/lacylights-mcp
 fi
 
 print_success "Version management symlinks created"
@@ -405,23 +349,13 @@ else
     FRONTEND_PKG_VERSION="unknown"
 fi
 
-if [ -f /opt/lacylights/mcp/package.json ]; then
-    MCP_PKG_VERSION=$(grep '"version"' /opt/lacylights/mcp/package.json | head -1 | sed 's/.*"version": "\(.*\)".*/v\1/')
-    if [ -z "$MCP_PKG_VERSION" ] || [ "$MCP_PKG_VERSION" = "v" ]; then
-        MCP_PKG_VERSION="unknown"
-    fi
-else
-    MCP_PKG_VERSION="unknown"
-fi
-
 # Create .lacylights-version files with proper user context
 # Each component's version file is owned by the same user that owns that component's directory
 # Using tee instead of redirect to avoid shell permission issues
 echo "$BACKEND_PKG_VERSION" | sudo -u lacylights tee /opt/lacylights/backend/.lacylights-version > /dev/null
 echo "$FRONTEND_PKG_VERSION" | sudo -u pi tee /opt/lacylights/frontend-src/.lacylights-version > /dev/null
-echo "$MCP_PKG_VERSION" | sudo -u pi tee /opt/lacylights/mcp/.lacylights-version > /dev/null
 
-print_info "Installed versions: Backend=$BACKEND_PKG_VERSION, Frontend=$FRONTEND_PKG_VERSION, MCP=$MCP_PKG_VERSION"
+print_info "Installed versions: Backend=$BACKEND_PKG_VERSION, Frontend=$FRONTEND_PKG_VERSION"
 print_success "Version tracking files created"
 
 # Install and start frontend service

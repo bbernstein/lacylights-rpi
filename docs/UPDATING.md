@@ -17,7 +17,7 @@ Most common - updating your LacyLights application code:
 
 ```bash
 # On your development machine
-cd lacylights-go  # or lacylights-fe, lacylights-mcp
+cd lacylights-go  # or lacylights-fe
 git pull origin main
 
 # Deploy to Pi

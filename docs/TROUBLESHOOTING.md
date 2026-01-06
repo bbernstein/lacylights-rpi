@@ -510,7 +510,6 @@ systemctl status lacylights
 
 - Check for infinite loops in logs
 - Reduce Art-Net refresh rate in settings
-- Disable MCP server if not needed
 
 ## DMX/Art-Net Issues
 
