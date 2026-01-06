@@ -94,7 +94,7 @@ cleanup_deprecated_mcp() {
     local cleaned=false
 
     # Stop and disable MCP service if it exists
-    if systemctl list-unit-files lacylights-mcp.service &>/dev/null 2>&1; then
+    if systemctl list-unit-files 2>/dev/null | grep -q 'lacylights-mcp.service'; then
         if systemctl is-active --quiet lacylights-mcp 2>/dev/null; then
             print_status "Stopping deprecated MCP service..."
             sudo systemctl stop lacylights-mcp 2>/dev/null || true
@@ -119,17 +119,16 @@ cleanup_deprecated_mcp() {
         cleaned=true
     fi
 
-    # Remove orphaned MCP repo directory
-    if [ -d "$REPOS_DIR/lacylights-mcp" ]; then
-        print_status "Removing deprecated MCP repo directory..."
-        sudo rm -rf "$REPOS_DIR/lacylights-mcp"
-        cleaned=true
-    fi
-
-    # Remove stale MCP symlink if it exists
+    # Remove stale MCP symlink if it exists (check symlink BEFORE directory,
+    # since -d follows symlinks and would match a symlink to a directory)
     if [ -L "$REPOS_DIR/lacylights-mcp" ]; then
         print_status "Removing deprecated MCP symlink..."
         sudo rm -f "$REPOS_DIR/lacylights-mcp"
+        cleaned=true
+    # Remove orphaned MCP repo directory (only if not a symlink)
+    elif [ -d "$REPOS_DIR/lacylights-mcp" ]; then
+        print_status "Removing deprecated MCP repo directory..."
+        sudo rm -rf "$REPOS_DIR/lacylights-mcp"
         cleaned=true
     fi
 
