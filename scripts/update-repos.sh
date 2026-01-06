@@ -142,7 +142,6 @@ get_dist_component() {
     case "$repo" in
         lacylights-go) echo "go" ;;
         lacylights-fe) echo "fe-server" ;;  # RPi uses server build with pre-built .next
-        lacylights-mcp) echo "mcp" ;;
         *) echo "" ;;
     esac
 }
@@ -305,13 +304,6 @@ restore_from_backup() {
                 sudo systemctl stop lacylights-frontend
             fi
             ;;
-        lacylights-mcp)
-            # MCP doesn't have a standalone service, but backend depends on it
-            # Stop backend so it can pick up restored MCP version
-            if systemctl is-active --quiet lacylights; then
-                sudo systemctl stop lacylights
-            fi
-            ;;
     esac
 
     # Safety check: Only allow removal if repo_dir is within /opt/lacylights/repos/
@@ -366,10 +358,6 @@ restore_from_backup() {
         lacylights-fe)
             sudo systemctl start lacylights-frontend || true
             ;;
-        lacylights-mcp)
-            # Restart backend to pick up restored MCP version
-            sudo systemctl start lacylights || true
-            ;;
     esac
 
     print_success "$repo_name restored from backup"
@@ -385,11 +373,9 @@ get_all_versions() {
     # Read versions from actual deployment directories, not repos/
     local fe_installed=$(get_installed_version "$LACYLIGHTS_ROOT/frontend-src")
     local go_installed=$(get_installed_version "$LACYLIGHTS_ROOT/backend")
-    local mcp_installed=$(get_installed_version "$LACYLIGHTS_ROOT/mcp")
 
     local fe_latest=$(get_latest_release_version "lacylights-fe")
     local go_latest=$(get_latest_release_version "lacylights-go")
-    local mcp_latest=$(get_latest_release_version "lacylights-mcp")
 
     if [ "$output_format" = "json" ]; then
         cat <<EOF
@@ -401,17 +387,12 @@ get_all_versions() {
   "lacylights-go": {
     "installed": "$go_installed",
     "latest": "$go_latest"
-  },
-  "lacylights-mcp": {
-    "installed": "$mcp_installed",
-    "latest": "$mcp_latest"
   }
 }
 EOF
     else
         echo "lacylights-fe: $fe_installed (latest: $fe_latest)"
         echo "lacylights-go: $go_installed (latest: $go_latest)"
-        echo "lacylights-mcp: $mcp_installed (latest: $mcp_latest)"
     fi
 }
 
@@ -422,10 +403,10 @@ update_repo() {
 
     # Validate repo_name against whitelist
     case "$repo_name" in
-        "lacylights-fe"|"lacylights-go"|"lacylights-mcp")
+        "lacylights-fe"|"lacylights-go")
             ;;
         *)
-            print_error "Invalid repository name: $repo_name. Must be one of: lacylights-fe, lacylights-go, lacylights-mcp"
+            print_error "Invalid repository name: $repo_name. Must be one of: lacylights-fe, lacylights-go"
             return 1
             ;;
     esac
@@ -458,7 +439,6 @@ update_repo() {
     case "$repo_name" in
         "lacylights-go") version_check_dir="$LACYLIGHTS_ROOT/backend" ;;
         "lacylights-fe") version_check_dir="$LACYLIGHTS_ROOT/frontend-src" ;;
-        "lacylights-mcp") version_check_dir="$LACYLIGHTS_ROOT/mcp" ;;
         *) version_check_dir="$repo_dir" ;;
     esac
     local current_version=$(get_installed_version "$version_check_dir")
@@ -762,28 +742,6 @@ except Exception as e:
                 sleep 2
             fi
             ;;
-        lacylights-mcp)
-            # MCP doesn't have a standalone service, but backend depends on it
-            # Stop backend so it can pick up new MCP version after update
-            if systemctl is-active --quiet lacylights; then
-                print_status "Stopping backend service to pick up new MCP version..."
-                sudo systemctl stop lacylights
-                # Wait for systemd to confirm service is stopped
-                local wait_count=0
-                while systemctl is-active --quiet lacylights && [ $wait_count -lt 30 ]; do
-                    sleep 1
-                    wait_count=$((wait_count + 1))
-                done
-                # Verify service actually stopped
-                if systemctl is-active --quiet lacylights; then
-                    print_error "Service failed to stop after 30 seconds. Aborting update."
-                    rm -rf "$temp_dir" "$temp_backup"
-                    return 1
-                fi
-                # Give the process a moment to fully exit
-                sleep 1
-            fi
-            ;;
     esac
 
     # Replace old directory with new
@@ -1020,97 +978,6 @@ except Exception as e:
             return 1
         fi
         popd >/dev/null
-    elif [ "$repo_name" = "lacylights-mcp" ]; then
-        # MCP is a Node.js package - deploy to mcp directory where backend can find it
-        print_status "Deploying MCP to mcp directory..."
-        local mcp_dir="$LACYLIGHTS_ROOT/mcp"
-
-        # Safety check: Validate mcp_dir path before removal
-        if [[ ! "$mcp_dir" =~ ^/opt/lacylights/mcp$ ]]; then
-            print_error "Invalid MCP directory path: $mcp_dir"
-            restore_from_backup "$backup_file" "$repo_name"
-            return 1
-        fi
-
-        if [ -d "$mcp_dir" ]; then
-            # Remove old files
-            print_status "Removing old MCP files..."
-            rm -rf "$mcp_dir"/*
-        else
-            print_status "Creating MCP directory..."
-            if ! sudo mkdir -p "$mcp_dir"; then
-                print_error "Failed to create MCP directory"
-                restore_from_backup "$backup_file" "$repo_name"
-                return 1
-            fi
-        fi
-
-        # Set ownership and permissions
-        sudo chown -R lacylights:lacylights "$mcp_dir"
-        sudo chmod -R g+w "$mcp_dir"
-        sudo chmod g+s "$mcp_dir"
-
-        # Copy new files from repos to mcp directory
-        if cp -r "$repo_dir"/* "$mcp_dir/"; then
-            sudo chmod -R g+w "$mcp_dir"
-            print_success "MCP files deployed to $mcp_dir"
-
-            # Install dependencies if package.json exists
-            if [ -f "$mcp_dir/package.json" ]; then
-                print_status "Installing MCP dependencies..."
-                pushd "$mcp_dir" >/dev/null
-
-                # Use npm cache directory to avoid EACCES errors
-                local npm_cache="$LACYLIGHTS_ROOT/.npm-cache"
-                sudo mkdir -p "$npm_cache"
-                sudo chown -R lacylights:lacylights "$npm_cache"
-                sudo chmod -R g+w "$npm_cache"
-                sudo chmod g+s "$npm_cache"
-
-                # Try npm ci first, fall back to npm install
-                # Note: MCP uses --production flag (unlike frontend) because it's consumed
-                # as a library by the backend and doesn't need dev dependencies
-                if [ -f "package-lock.json" ]; then
-                    npm ci --production --cache "$npm_cache" >> "$LOG_FILE" 2>&1
-                    npm_exit_code=$?
-                    if [ $npm_exit_code -eq 0 ]; then
-                        sudo chmod -R g+w "$mcp_dir/node_modules" 2>/dev/null || true
-                        print_success "MCP dependencies installed via npm ci"
-                    else
-                        print_warning "npm ci failed, falling back to npm install..."
-                        npm install --production --cache "$npm_cache" >> "$LOG_FILE" 2>&1
-                        npm_exit_code=$?
-                        if [ $npm_exit_code -eq 0 ]; then
-                            sudo chmod -R g+w "$mcp_dir/node_modules" 2>/dev/null || true
-                            print_success "MCP dependencies installed via npm install"
-                        else
-                            print_error "Failed to install MCP dependencies"
-                            popd >/dev/null
-                            restore_from_backup "$backup_file" "$repo_name"
-                            return 1
-                        fi
-                    fi
-                else
-                    npm install --production --cache "$npm_cache" >> "$LOG_FILE" 2>&1
-                    npm_exit_code=$?
-                    if [ $npm_exit_code -eq 0 ]; then
-                        sudo chmod -R g+w "$mcp_dir/node_modules" 2>/dev/null || true
-                        print_success "MCP dependencies installed"
-                    else
-                        print_error "Failed to install MCP dependencies"
-                        popd >/dev/null
-                        restore_from_backup "$backup_file" "$repo_name"
-                        return 1
-                    fi
-                fi
-
-                popd >/dev/null
-            fi
-        else
-            print_error "Failed to copy MCP files to mcp directory"
-            restore_from_backup "$backup_file" "$repo_name"
-            return 1
-        fi
     elif [ -f "$repo_dir/package.json" ]; then
         # Fix npm cache permissions before running npm commands
         fix_npm_permissions
@@ -1232,34 +1099,6 @@ except Exception as e:
                 return 1
             fi
             ;;
-        lacylights-mcp)
-            # MCP doesn't have a standalone service, restart backend to pick up new MCP version
-            print_status "Restarting backend service to pick up new MCP version..."
-            sudo systemctl start lacylights || true
-            # Retry with exponential backoff to allow service time to start
-            local retry_count=0
-            local max_retries=5
-            local wait_time=1
-            while [ $retry_count -lt $max_retries ]; do
-                sleep $wait_time
-                if sudo systemctl is-active --quiet lacylights; then
-                    print_success "lacylights service started successfully with new MCP version"
-                    break
-                fi
-                retry_count=$((retry_count + 1))
-                wait_time=$((wait_time * 2))
-                if [ $retry_count -lt $max_retries ]; then
-                    print_status "Service not ready, retrying in ${wait_time}s (attempt $((retry_count + 1))/$max_retries)..."
-                fi
-            done
-
-            if [ $retry_count -eq $max_retries ]; then
-                print_error "Failed to start lacylights service after $max_retries attempts"
-                print_status "Attempting to restore from backup..."
-                restore_from_backup "$backup_file" "$repo_name"
-                return 1
-            fi
-            ;;
     esac
 
     # Write version file to deployment directory ONLY after successful deployment
@@ -1268,7 +1107,6 @@ except Exception as e:
     case "$repo_name" in
         "lacylights-go") version_file_dir="$LACYLIGHTS_ROOT/backend" ;;
         "lacylights-fe") version_file_dir="$LACYLIGHTS_ROOT/frontend-src" ;;
-        "lacylights-mcp") version_file_dir="$LACYLIGHTS_ROOT/mcp" ;;
         *) version_file_dir="$repo_dir" ;;
     esac
     echo "$version_to_install" > "$version_file_dir/.lacylights-version"
@@ -1319,11 +1157,11 @@ main() {
 
         update-all)
             # Update all repos to latest
-            # Update frontend and MCP first, then backend last to avoid self-update interruption
+            # Update frontend first, then backend last to avoid self-update interruption
             print_status "Updating all repositories to latest versions..."
             local failed=0
 
-            for repo in lacylights-fe lacylights-mcp lacylights-go; do
+            for repo in lacylights-fe lacylights-go; do
                 if ! update_repo "$repo" "latest"; then
                     failed=1
                 fi
@@ -1350,7 +1188,7 @@ Commands:
   available <repo>           List available versions for a repository
 
   update <repo> [version]    Update a repository to specific version
-                             repo: lacylights-fe, lacylights-go, or lacylights-mcp
+                             repo: lacylights-fe or lacylights-go
                              version: version tag (e.g., v1.2.3) or 'latest' (default)
 
   update-all                 Update all repositories to latest versions

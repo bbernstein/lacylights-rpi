@@ -11,9 +11,10 @@ This repository contains everything needed to deploy and run LacyLights on Raspb
 LacyLights is a complete stage lighting control system with:
 - DMX/Art-Net protocol support for professional lighting fixtures
 - Web-based interface for scene creation and cue management
-- AI-powered lighting design via MCP server integration
 - WiFi configuration for internet connectivity
 - Real-time lighting control and playback
+
+> **Note:** AI-powered lighting design via MCP server is available on macOS via the [lacylights-mac](https://github.com/bbernstein/lacylights-mac) application. The RPi distribution focuses on turnkey hardware deployment.
 
 ## Quick Start
 
@@ -33,7 +34,7 @@ That's it! This will:
 3. Configure the system (hostname, packages, swap)
 4. Set up networking (ethernet + WiFi)
 5. Install and configure PostgreSQL
-6. Deploy LacyLights (backend, frontend, MCP server)
+6. Deploy LacyLights (backend, frontend)
 7. Start the service
 
 After completion, access LacyLights at: **http://lacylights.local**
@@ -53,8 +54,7 @@ The `setup-local-pi.sh` script supports several options:
 # Specify component versions
 sudo bash scripts/setup-local-pi.sh \
     --backend-version v1.1.0 \
-    --frontend-version v0.2.0 \
-    --mcp-version v1.0.0
+    --frontend-version v0.2.0
 
 # Configure WiFi during setup
 sudo bash scripts/setup-local-pi.sh \
@@ -144,8 +144,7 @@ sudo ./setup/05-service-install.sh
 ```bash
 ./scripts/setup-new-pi.sh localhost \
     --backend-version v1.1.0 \
-    --frontend-version v0.2.0 \
-    --mcp-version v1.0.0
+    --frontend-version v0.2.0
 ```
 
 ### Deploying Updates
@@ -378,14 +377,12 @@ See [INSTALLATION_PREREQUISITES.md](docs/INSTALLATION_PREREQUISITES.md) for comp
 **For development workflow:** Clone the application repositories locally:
   - [lacylights-go](https://github.com/bbernstein/lacylights-go) (Go backend - recommended)
   - [lacylights-fe](https://github.com/bbernstein/lacylights-fe) (frontend)
-  - [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) (MCP server)
 
 **Recommended directory structure for development:**
 ```
 ~/src/lacylights/
 ├── lacylights-go/      # Go backend repository (for development)
 ├── lacylights-fe/      # Frontend repository (for development)
-├── lacylights-mcp/     # MCP server repository (for development)
 └── lacylights-rpi/     # This repository (deployment tools)
 ```
 
@@ -434,7 +431,6 @@ lacylights-rpi/
 ```bash
 ./scripts/deploy.sh --backend-only
 ./scripts/deploy.sh --frontend-only
-./scripts/deploy.sh --mcp-only
 ```
 
 ### Check System Health
@@ -531,7 +527,6 @@ See [config/.env.example](config/.env.example) for all options.
 - **Application:** `/opt/lacylights/`
   - Backend: `/opt/lacylights/backend/`
   - Frontend: `/opt/lacylights/frontend-src/`
-  - MCP Server: `/opt/lacylights/mcp/`
 - **Configuration:** `/opt/lacylights/backend/.env`
 - **Service:** `/etc/systemd/system/lacylights.service`
 - **Sudoers:** `/etc/sudoers.d/lacylights`
@@ -739,7 +734,6 @@ This is a deployment repository. For application code contributions:
 
 - Go Backend: [lacylights-go](https://github.com/bbernstein/lacylights-go) (recommended)
 - Frontend: [lacylights-fe](https://github.com/bbernstein/lacylights-fe)
-- MCP Server: [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp)
 
 For deployment tooling improvements, open an issue or PR in this repository.
 
@@ -803,7 +797,7 @@ LacyLights uses a Go backend for optimal performance on Raspberry Pi:
 - [lacylights](https://github.com/bbernstein/lacylights) - Main documentation
 - [lacylights-go](https://github.com/bbernstein/lacylights-go) - Go Backend (GraphQL, DMX, Database)
 - [lacylights-fe](https://github.com/bbernstein/lacylights-fe) - Frontend (React, Next.js)
-- [lacylights-mcp](https://github.com/bbernstein/lacylights-mcp) - MCP Server (AI integration)
+- [lacylights-mac](https://github.com/bbernstein/lacylights-mac) - macOS Application (includes MCP/AI integration)
 
 ## License
 

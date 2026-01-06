@@ -41,9 +41,6 @@ This will:
 
 # Frontend only
 ./scripts/deploy.sh --frontend-only
-
-# MCP server only
-./scripts/deploy.sh --mcp-only
 ```
 
 ### Skip Rebuild

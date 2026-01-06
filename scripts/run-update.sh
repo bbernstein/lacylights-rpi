@@ -45,12 +45,12 @@ VERSION="${2:-}"
 # Whitelist validation for repository name
 # Only allow known repository names to prevent injection
 case "$REPOSITORY" in
-    lacylights-go|lacylights-mcp|lacylights-fe)
+    lacylights-go|lacylights-fe)
         # Valid repository
         ;;
     *)
         echo "ERROR: Invalid repository name: $REPOSITORY" >&2
-        echo "Must be one of: lacylights-go, lacylights-mcp, lacylights-fe" >&2
+        echo "Must be one of: lacylights-go, lacylights-fe" >&2
         exit 1
         ;;
 esac
