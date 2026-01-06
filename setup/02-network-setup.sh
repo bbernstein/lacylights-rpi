@@ -80,6 +80,17 @@ else
     print_success "NetworkManager started"
 fi
 
+# Enable NetworkManager-wait-online service for proper network-online.target support
+# This ensures services waiting for network-online.target will start after IP is assigned
+print_info "Enabling NetworkManager-wait-online service..."
+
+if systemctl is-enabled NetworkManager-wait-online &> /dev/null; then
+    print_success "NetworkManager-wait-online already enabled"
+else
+    sudo systemctl enable NetworkManager-wait-online
+    print_success "NetworkManager-wait-online enabled"
+fi
+
 # Check WiFi device
 print_info "Checking WiFi device..."
 
