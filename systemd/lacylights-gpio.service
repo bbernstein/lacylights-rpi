@@ -1,8 +1,9 @@
 [Unit]
 Description=LacyLights GPIO Button Monitor
 Documentation=https://github.com/bbernstein/lacylights-rpi
-After=lacylights-go.service
-Requires=lacylights-go.service
+# Start after the main backend service is ready
+After=lacylights.service
+Requires=lacylights.service
 
 [Service]
 Type=simple

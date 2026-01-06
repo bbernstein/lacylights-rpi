@@ -25,6 +25,51 @@ ssh pi@lacylights.local '~/lacylights-setup/utils/view-logs.sh -e'
 
 ## Service Issues
 
+### Service Won't Start After Boot (Network Issues)
+
+**Symptoms:**
+- Service fails on boot with network-related errors
+- ArtNet broadcast connection failures on startup
+- Service works when manually started after boot
+
+**Cause:** The service started before the network interface obtained an IP address.
+
+**Diagnosis:**
+```bash
+# Check if network-online.target is properly configured
+systemctl status systemd-networkd-wait-online.service
+# Or if using NetworkManager:
+systemctl status NetworkManager-wait-online.service
+```
+
+**Solutions:**
+
+#### 1. Enable Network Wait Service
+
+On most Raspberry Pi OS installations, this should be enabled by default, but if not:
+
+```bash
+# For systemd-networkd (most common)
+sudo systemctl enable systemd-networkd-wait-online.service
+
+# Or if using NetworkManager:
+sudo systemctl enable NetworkManager-wait-online.service
+```
+
+#### 2. Check Network-Online Target
+
+```bash
+# Verify network-online.target is reached
+systemctl list-dependencies network-online.target
+```
+
+#### 3. Manual Restart After Boot
+
+As a temporary workaround:
+```bash
+sudo systemctl restart lacylights
+```
+
 ### Service Won't Start
 
 **Symptoms:**

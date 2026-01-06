@@ -1,8 +1,10 @@
 [Unit]
 Description=LacyLights WiFi Mode Management
 Documentation=https://github.com/bbernstein/lacylights-rpi
-After=NetworkManager.service lacylights-go.service
-Requires=lacylights-go.service
+# Wait for network and backend to be ready before checking WiFi mode
+After=NetworkManager.service network-online.target lacylights.service
+Wants=network-online.target
+Requires=lacylights.service
 
 [Service]
 Type=oneshot
