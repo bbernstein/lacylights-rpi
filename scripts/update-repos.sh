@@ -87,6 +87,57 @@ get_current_platform() {
     echo "${os}:${arch}"
 }
 
+# Function to clean up deprecated MCP components from existing installations
+# MCP has been removed from RPi distribution (it's macOS-only via lacylights-mac)
+# This function removes orphaned directories and services from older installations
+cleanup_deprecated_mcp() {
+    local cleaned=false
+
+    # Stop and disable MCP service if it exists
+    if systemctl list-unit-files lacylights-mcp.service &>/dev/null 2>&1; then
+        if systemctl is-active --quiet lacylights-mcp 2>/dev/null; then
+            print_status "Stopping deprecated MCP service..."
+            sudo systemctl stop lacylights-mcp 2>/dev/null || true
+        fi
+        if systemctl is-enabled --quiet lacylights-mcp 2>/dev/null; then
+            print_status "Disabling deprecated MCP service..."
+            sudo systemctl disable lacylights-mcp 2>/dev/null || true
+        fi
+        # Remove the service file if it exists
+        if [ -f "/etc/systemd/system/lacylights-mcp.service" ]; then
+            print_status "Removing deprecated MCP service file..."
+            sudo rm -f /etc/systemd/system/lacylights-mcp.service
+            sudo systemctl daemon-reload
+        fi
+        cleaned=true
+    fi
+
+    # Remove orphaned MCP directory
+    if [ -d "$LACYLIGHTS_ROOT/mcp" ]; then
+        print_status "Removing deprecated MCP directory..."
+        sudo rm -rf "$LACYLIGHTS_ROOT/mcp"
+        cleaned=true
+    fi
+
+    # Remove orphaned MCP repo directory
+    if [ -d "$REPOS_DIR/lacylights-mcp" ]; then
+        print_status "Removing deprecated MCP repo directory..."
+        sudo rm -rf "$REPOS_DIR/lacylights-mcp"
+        cleaned=true
+    fi
+
+    # Remove stale MCP symlink if it exists
+    if [ -L "$REPOS_DIR/lacylights-mcp" ]; then
+        print_status "Removing deprecated MCP symlink..."
+        sudo rm -f "$REPOS_DIR/lacylights-mcp"
+        cleaned=true
+    fi
+
+    if [ "$cleaned" = true ]; then
+        print_success "Deprecated MCP components cleaned up"
+    fi
+}
+
 # Function to fix npm cache permissions
 # This fixes issues where npm cache was created by root user
 fix_npm_permissions() {
@@ -1159,6 +1210,10 @@ main() {
             # Update all repos to latest
             # Update frontend first, then backend last to avoid self-update interruption
             print_status "Updating all repositories to latest versions..."
+
+            # Clean up deprecated MCP components from older installations
+            cleanup_deprecated_mcp
+
             local failed=0
 
             for repo in lacylights-fe lacylights-go; do
