@@ -1,7 +1,10 @@
 [Unit]
 Description=LacyLights Stage Lighting Control (Go Backend)
 Documentation=https://github.com/bbernstein/lacylights
-After=network.target
+# Wait for network to be fully online before starting
+# This ensures the network interface has an IP address
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple

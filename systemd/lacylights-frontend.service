@@ -1,7 +1,9 @@
 [Unit]
 Description=LacyLights Frontend (Next.js Server)
-After=network.target
-Wants=lacylights.service
+# Wait for network to be fully online before starting
+# This ensures the network interface has an IP address
+After=network-online.target
+Wants=network-online.target lacylights.service
 
 [Service]
 Type=simple
