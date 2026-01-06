@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # LacyLights Deployment Script
-# General-purpose deployment for backend, frontend, and MCP server
+# General-purpose deployment for backend and frontend
 #
 # Usage:
 #   ./scripts/deploy.sh                    Deploy all components
 #   ./scripts/deploy.sh --backend-only     Deploy only backend
 #   ./scripts/deploy.sh --frontend-only    Deploy only frontend
-#   ./scripts/deploy.sh --mcp-only         Deploy only MCP server
 #   ./scripts/deploy.sh --skip-rebuild     Sync files only, no rebuild
 #   ./scripts/deploy.sh --skip-restart     Don't restart services
 
@@ -26,7 +25,6 @@ PI_USER="${PI_USER:-pi}"  # Default to 'pi', but allow override via environment 
 PI_HOST="${PI_HOST:-lacylights.local}"
 BACKEND_REMOTE="/opt/lacylights/backend"
 FRONTEND_REMOTE="/opt/lacylights/frontend-src"
-MCP_REMOTE="/opt/lacylights/mcp"
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REPOS_DIR="$(dirname "$LOCAL_DIR")"
 
@@ -38,7 +36,6 @@ fi
 # Parse command line arguments
 DEPLOY_BACKEND=true
 DEPLOY_FRONTEND=true
-DEPLOY_MCP=true
 SKIP_LOCAL_BUILD=false
 REBUILD_ON_PI=false
 SKIP_RESTART=false
@@ -47,17 +44,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --backend-only)
             DEPLOY_FRONTEND=false
-            DEPLOY_MCP=false
             shift
             ;;
         --frontend-only)
             DEPLOY_BACKEND=false
-            DEPLOY_MCP=false
-            shift
-            ;;
-        --mcp-only)
-            DEPLOY_BACKEND=false
-            DEPLOY_FRONTEND=false
             shift
             ;;
         --skip-local-build)
@@ -81,7 +71,6 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --backend-only       Deploy only backend"
             echo "  --frontend-only      Deploy only frontend"
-            echo "  --mcp-only           Deploy only MCP server"
             echo "  --skip-local-build   Skip building locally (use existing builds)"
             echo "  --rebuild-on-pi      Rebuild on Pi after deployment (slower, default: false)"
             echo "  --skip-restart       Don't restart services"
@@ -143,7 +132,6 @@ print_info "Configuration:"
 print_info "  Target: $PI_HOST"
 print_info "  Backend: $([ "$DEPLOY_BACKEND" = true ] && echo "✓" || echo "✗")"
 print_info "  Frontend: $([ "$DEPLOY_FRONTEND" = true ] && echo "✓" || echo "✗")"
-print_info "  MCP: $([ "$DEPLOY_MCP" = true ] && echo "✓" || echo "✗")"
 print_info "  Local Build: $([ "$SKIP_LOCAL_BUILD" = false ] && echo "✓" || echo "✗")"
 print_info "  Rebuild on Pi: $([ "$REBUILD_ON_PI" = true ] && echo "✓" || echo "✗")"
 print_info "  Restart: $([ "$SKIP_RESTART" = false ] && echo "✓" || echo "✗")"
@@ -159,11 +147,6 @@ fi
 if [ ! -d "$REPOS_DIR/lacylights-fe" ]; then
     print_error "Frontend repository not found at $REPOS_DIR/lacylights-fe"
     exit 1
-fi
-
-if [ ! -d "$REPOS_DIR/lacylights-mcp" ]; then
-    print_warning "MCP repository not found at $REPOS_DIR/lacylights-mcp"
-    DEPLOY_MCP=false
 fi
 
 print_success "Repository locations verified"
@@ -342,17 +325,6 @@ else
     echo "[INFO] Frontend source directory exists (ownership and permissions verified)"
 fi
 
-# MCP directory (owned by pi for npm operations)
-if [ ! -d "/opt/lacylights/mcp" ]; then
-    sudo mkdir -p /opt/lacylights/mcp
-    sudo chown -R pi:pi /opt/lacylights/mcp
-    echo "[INFO] Created /opt/lacylights/mcp (owned by pi)"
-else
-    # Ensure proper ownership even if directory exists
-    sudo chown -R pi:pi /opt/lacylights/mcp
-    echo "[INFO] MCP directory exists (ownership verified)"
-fi
-
 # Logs directory (owned by lacylights for version management and service logs)
 if [ ! -d "/opt/lacylights/logs" ]; then
     sudo mkdir -p /opt/lacylights/logs
@@ -458,29 +430,6 @@ if [ "$SKIP_LOCAL_BUILD" = false ]; then
             print_success "Frontend built successfully"
         else
             print_error "Frontend build failed"
-            exit 1
-        fi
-    fi
-
-    # Build MCP
-    if [ "$DEPLOY_MCP" = true ]; then
-        print_info "Building MCP server..."
-        cd "$REPOS_DIR/lacylights-mcp"
-
-        # Install dependencies if needed
-        if [ ! -d "node_modules" ]; then
-            print_info "Installing MCP dependencies..."
-            npm install
-        fi
-
-        # Build
-        print_info "Compiling TypeScript..."
-        npm run build
-
-        if [ $? -eq 0 ]; then
-            print_success "MCP server built successfully"
-        else
-            print_error "MCP server build failed"
             exit 1
         fi
     fi
@@ -619,39 +568,6 @@ if [ "$DEPLOY_FRONTEND" = true ]; then
     print_success "Frontend code and build artifacts synced"
 fi
 
-# MCP Deployment
-if [ "$DEPLOY_MCP" = true ]; then
-    print_header "Deploying MCP Server (lacylights-mcp)"
-
-    cd "$REPOS_DIR/lacylights-mcp"
-
-    # Check current branch
-    MCP_BRANCH=$(git branch --show-current)
-    print_info "Current branch: $MCP_BRANCH"
-
-    # Type check MCP
-    print_info "Running TypeScript type check..."
-    if npm run type-check 2>&1 | grep -q "error TS"; then
-        print_error "MCP type check failed"
-        print_error "Fix type errors before deploying"
-        exit 1
-    fi
-    print_success "MCP type check passed"
-
-    # Sync MCP to Pi (including built dist/)
-    print_info "Syncing MCP code and build artifacts to Raspberry Pi..."
-    rsync -avz --delete \
-        --exclude 'node_modules' \
-        --exclude '.git' \
-        --exclude '.DS_Store' \
-        --exclude 'coverage' \
-        --exclude '*.log' \
-        --exclude '__tests__' \
-        ./ "$PI_HOST:$MCP_REMOTE/"
-
-    print_success "MCP code and build artifacts synced"
-fi
-
 # Deploy update scripts for version management (only when deploying backend)
 # The update scripts are used by the backend service for version management
 if [ "$DEPLOY_BACKEND" = true ]; then
@@ -702,7 +618,7 @@ set -e
 
 # Remove any stale symlinks in /opt/lacylights/repos/ that point elsewhere
 # These cause conflicts with the update system which expects real directories
-for repo in lacylights-go lacylights-fe lacylights-mcp; do
+for repo in lacylights-go lacylights-fe; do
     if [ -L "/opt/lacylights/repos/$repo" ]; then
         echo "[INFO] Removing stale symlink: /opt/lacylights/repos/$repo"
         sudo rm -f "/opt/lacylights/repos/$repo"
@@ -713,7 +629,6 @@ done
 # The update system needs these directories for downloading updates and creating backups
 sudo mkdir -p /opt/lacylights/repos/lacylights-go
 sudo mkdir -p /opt/lacylights/repos/lacylights-fe
-sudo mkdir -p /opt/lacylights/repos/lacylights-mcp
 sudo chown -R lacylights:lacylights /opt/lacylights/repos
 
 echo "[SUCCESS] Version management directories ready"
@@ -748,7 +663,6 @@ get_local_version() {
 # Get versions only for repos that are being deployed
 GO_VERSION="unknown"
 FE_VERSION="unknown"
-MCP_VERSION="unknown"
 
 if [ "$DEPLOY_BACKEND" = true ]; then
     GO_VERSION=$(get_local_version "$REPOS_DIR/lacylights-go")
@@ -756,31 +670,23 @@ fi
 if [ "$DEPLOY_FRONTEND" = true ]; then
     FE_VERSION=$(get_local_version "$REPOS_DIR/lacylights-fe")
 fi
-if [ "$DEPLOY_MCP" = true ]; then
-    MCP_VERSION=$(get_local_version "$REPOS_DIR/lacylights-mcp")
-fi
 
-print_info "Detected versions: backend=$GO_VERSION, frontend=$FE_VERSION, mcp=$MCP_VERSION"
+print_info "Detected versions: backend=$GO_VERSION, frontend=$FE_VERSION"
 
 # Set version files on Pi only for deployed components
 # Pass versions and deployment flags as positional parameters to avoid command injection
-ssh "$PI_HOST" bash -s -- "$GO_VERSION" "$FE_VERSION" "$MCP_VERSION" "$DEPLOY_BACKEND" "$DEPLOY_FRONTEND" "$DEPLOY_MCP" <<'ENDSSH'
+ssh "$PI_HOST" bash -s -- "$GO_VERSION" "$FE_VERSION" "$DEPLOY_BACKEND" "$DEPLOY_FRONTEND" <<'ENDSSH'
 set -e
 
-if [ "$4" = true ]; then
+if [ "$3" = true ]; then
     echo "[INFO] Setting backend version to $1"
     echo "$1" | sudo -u lacylights tee "/opt/lacylights/backend/.lacylights-version" > /dev/null
 fi
 
-if [ "$5" = true ]; then
+if [ "$4" = true ]; then
     echo "[INFO] Setting frontend-src version to $2"
     # Both pi and lacylights can write due to shared group ownership
     echo "$2" | sudo -u lacylights tee "/opt/lacylights/frontend-src/.lacylights-version" > /dev/null
-fi
-
-if [ "$6" = true ]; then
-    echo "[INFO] Setting mcp version to $3"
-    echo "$3" | sudo -u pi tee "/opt/lacylights/mcp/.lacylights-version" > /dev/null
 fi
 
 echo "[SUCCESS] Version tracking files created"
@@ -792,7 +698,7 @@ else
     print_warning "Version management setup had some issues (non-critical)"
 fi
 
-# Rebuild on Pi (optional, for frontend/MCP only - Go backend doesn't need rebuild)
+# Rebuild on Pi (optional, for frontend only - Go backend doesn't need rebuild)
 if [ "$REBUILD_ON_PI" = true ]; then
     print_header "Rebuilding Projects on Raspberry Pi"
 
@@ -810,14 +716,6 @@ if [ "$REBUILD_ON_PI" = true ]; then
 cd $FRONTEND_REMOTE
 sudo -u lacylights npm install --production
 sudo -u lacylights npm run build
-"
-    fi
-
-    if [ "$DEPLOY_MCP" = true ]; then
-        BUILD_COMMANDS+="echo '[INFO] Rebuilding MCP server...'
-cd $MCP_REMOTE
-sudo -u pi npm install --production
-sudo -u pi npm run build
 "
     fi
 
@@ -851,13 +749,6 @@ if [ "$REBUILD_ON_PI" = false ]; then
     if [ "$DEPLOY_FRONTEND" = true ]; then
         INSTALL_COMMANDS+="echo '[INFO] Installing frontend dependencies...'
 cd $FRONTEND_REMOTE
-sudo -u pi npm install --production
-"
-    fi
-
-    if [ "$DEPLOY_MCP" = true ]; then
-        INSTALL_COMMANDS+="echo '[INFO] Installing MCP dependencies...'
-cd $MCP_REMOTE
 sudo -u pi npm install --production
 "
     fi

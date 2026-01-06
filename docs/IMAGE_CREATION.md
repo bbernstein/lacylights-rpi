@@ -72,7 +72,6 @@ This script will:
 This installs:
 - Go backend server
 - Next.js frontend
-- MCP server for AI integration
 - Nginx reverse proxy
 - systemd services
 

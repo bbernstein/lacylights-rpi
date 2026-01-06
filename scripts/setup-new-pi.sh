@@ -41,7 +41,6 @@ PI_HOST=""
 PI_USER="${PI_USER:-pi}"  # Default to 'pi', but allow override via environment variable
 BACKEND_VERSION="main"
 FRONTEND_VERSION="main"
-MCP_VERSION="main"
 OFFLINE_BUNDLE=""
 
 while [[ $# -gt 0 ]]; do
@@ -52,10 +51,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --frontend-version)
             FRONTEND_VERSION="$2"
-            shift 2
-            ;;
-        --mcp-version)
-            MCP_VERSION="$2"
             shift 2
             ;;
         --offline-bundle)
@@ -74,7 +69,6 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --backend-version TAG     Git tag/branch for backend (default: main)"
             echo "  --frontend-version TAG    Git tag/branch for frontend (default: main)"
-            echo "  --mcp-version TAG         Git tag/branch for MCP server (default: main)"
             echo "  --offline-bundle PATH     Use offline bundle (no internet on Pi required)"
             echo "  --help                    Show this help message"
             echo ""
@@ -97,7 +91,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 ntclights.local                    # Uses default user 'pi'"
             echo "  PI_USER=admin $0 ntclights.local      # Uses user 'admin'"
             echo "  $0 lacylights.local --backend-version v1.1.0 --frontend-version v0.2.0"
-            echo "  $0 lacylights.local --offline-bundle lacylights-offline-20251027-160000.tar.gz"
+            echo "  $0 lacylights.local --offline-bundle lacylights-offline-*.tar.gz"
             exit 0
             ;;
         *)
@@ -146,7 +140,6 @@ else
     print_info "Mode: ONLINE (Pi will download from GitHub/npm)"
     print_info "Backend version: $BACKEND_VERSION"
     print_info "Frontend version: $FRONTEND_VERSION"
-    print_info "MCP version: $MCP_VERSION"
 fi
 
 # Get script directory
@@ -634,9 +627,6 @@ echo "[SUCCESS] Go backend binary ready"
 # Download frontend
 download_release "bbernstein/lacylights-fe" "$FRONTEND_VERSION" "/opt/lacylights/frontend-src"
 
-# Download MCP server
-download_release "bbernstein/lacylights-mcp" "$MCP_VERSION" "/opt/lacylights/mcp"
-
 # Clean up temp directory
 rm -rf /tmp/lacylights-downloads
 
@@ -769,13 +759,6 @@ if ! extract_with_progress "releases/frontend.tar.gz" "/opt/lacylights/frontend-
     exit 1
 fi
 
-echo "[INFO] Extracting MCP server..."
-mkdir -p /opt/lacylights/mcp
-if ! extract_with_progress "releases/mcp.tar.gz" "/opt/lacylights/mcp" "Extracting MCP server code"; then
-    echo "[ERROR] Failed to extract MCP server"
-    exit 1
-fi
-
 # Extract pre-downloaded node_modules
 echo "[INFO] Extracting pre-downloaded dependencies..."
 if [ -f releases/backend-node_modules.tar.gz ]; then
@@ -798,16 +781,6 @@ else
     echo "[WARNING] frontend-node_modules.tar.gz not found in bundle"
 fi
 
-if [ -f releases/mcp-node_modules.tar.gz ]; then
-    echo "[INFO] Extracting MCP dependencies..."
-    if ! extract_with_progress "releases/mcp-node_modules.tar.gz" "/opt/lacylights/mcp" "MCP dependencies"; then
-        echo "[ERROR] Failed to extract MCP dependencies"
-        exit 1
-    fi
-else
-    echo "[WARNING] mcp-node_modules.tar.gz not found in bundle"
-fi
-
 # Extract pre-built artifacts (don't strip components - preserve dist/ and .next/ directories)
 echo "[INFO] Extracting pre-built artifacts..."
 if [ -f releases/backend-dist.tar.gz ]; then
@@ -828,16 +801,6 @@ if [ -f releases/frontend-next.tar.gz ]; then
     fi
 else
     echo "[WARNING] frontend-next.tar.gz not found in bundle"
-fi
-
-if [ -f releases/mcp-dist.tar.gz ]; then
-    echo "[INFO] Extracting MCP build artifacts..."
-    if ! extract_with_progress "releases/mcp-dist.tar.gz" "/opt/lacylights/mcp" "MCP dist/" 0; then
-        echo "[ERROR] Failed to extract MCP dist/"
-        exit 1
-    fi
-else
-    echo "[WARNING] mcp-dist.tar.gz not found in bundle"
 fi
 
 echo "[SUCCESS] All files extracted from offline bundle"
@@ -900,7 +863,7 @@ print_success "Configuration files created"
 # Build projects (while still owned by pi user)
 print_header "Step 10: Building Projects"
 if [ -z "$OFFLINE_BUNDLE" ]; then
-    print_info "Building frontend and MCP (ONLINE MODE)..."
+    print_info "Building frontend (ONLINE MODE)..."
     print_info "Note: Go backend is pre-built binary, only building Node.js projects"
 
     ssh "$PI_HOST" << 'ENDSSH'
@@ -912,13 +875,6 @@ echo "[INFO] Building frontend..."
 cd /opt/lacylights/frontend-src
 npm install
 npm run build
-
-if [ -d /opt/lacylights/mcp ]; then
-    echo "[INFO] Building MCP server..."
-    cd /opt/lacylights/mcp
-    npm install
-    npm run build
-fi
 
 ENDSSH
 
@@ -934,12 +890,6 @@ echo "[INFO] Go backend is pre-built binary - no rebuild needed"
 echo "[INFO] Rebuilding frontend native modules..."
 cd /opt/lacylights/frontend-src
 npm rebuild
-
-if [ -d /opt/lacylights/mcp ]; then
-    echo "[INFO] Rebuilding MCP server native modules..."
-    cd /opt/lacylights/mcp
-    npm rebuild
-fi
 
 echo "[SUCCESS] All projects ready (using pre-built artifacts)"
 

@@ -437,10 +437,6 @@ Typical improvements:
 
 Yes. The Go backend includes the same WiFi management capabilities as the Node.js backend.
 
-### What about the MCP server?
-
-The MCP server is separate and continues to work with both Node.js and Go backends. No changes needed.
-
 ### Is the Go backend production-ready?
 
 Yes. The Go backend has been tested to ensure feature parity and compatibility with the Node.js backend.

@@ -7,9 +7,9 @@ Complete guide to configuring WiFi on your LacyLights Raspberry Pi.
 LacyLights uses a **dual-network architecture**:
 
 - **Ethernet (wired)** - For DMX/Art-Net lighting control
-- **WiFi (wireless)** - For external internet access (AI models, updates)
+- **WiFi (wireless)** - For external internet access (system updates)
 
-This allows your lighting network to remain isolated while still providing internet connectivity for features like the MCP AI server.
+This allows your lighting network to remain isolated while still providing internet connectivity for system updates.
 
 ## Quick Setup
 
@@ -476,7 +476,6 @@ This checks:
 ### Bandwidth Considerations
 
 LacyLights WiFi is primarily for:
-- MCP server communication with AI models (low bandwidth)
 - System updates (occasional)
 - Web interface access (minimal)
 

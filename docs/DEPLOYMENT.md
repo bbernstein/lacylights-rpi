@@ -21,7 +21,7 @@ cd lacylights-rpi
 This will:
 1. Type check all code before deployment
 2. Sync code to the Raspberry Pi
-3. Rebuild backend, frontend, and MCP server
+3. Rebuild backend and frontend
 4. Restart the LacyLights service
 5. Run health checks
 
@@ -41,9 +41,6 @@ This will:
 
 # Frontend only
 ./scripts/deploy.sh --frontend-only
-
-# MCP server only
-./scripts/deploy.sh --mcp-only
 ```
 
 ### Skip Rebuild

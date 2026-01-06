@@ -111,7 +111,6 @@ This will:
 The offline bundle includes:
 - ✅ Backend code (lacylights-go) - **pre-built on Mac**
 - ✅ Frontend code (lacylights-fe) - **pre-built on Mac**
-- ✅ MCP server code (lacylights-mcp) - **pre-built on Mac**
 - ✅ All npm dependencies pre-downloaded
 - ✅ Pre-built artifacts (dist/, .next/)
 - ✅ Configuration files
