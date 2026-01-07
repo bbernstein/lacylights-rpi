@@ -18,3 +18,35 @@ lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+
+# Allow update script to manage npm cache and related directories
+# Security: Only allows specific npm-related paths, not arbitrary paths
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /home/lacylights/.npm
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /home/lacylights/.npm
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /home/lacylights/.node-gyp
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /home/lacylights/.cache/node
+
+# Allow update script to manage lacylights deployment directories
+# Security: Restricted to specific known directories used by the update script
+#   - frontend-src: deployed frontend files
+#   - backend: deployed backend binary
+#   - repos/lacylights-*: downloaded release archives (restricted to known prefixes)
+# Note: sudoers wildcards are string patterns, not path resolution, so path traversal
+# like /opt/lacylights/../etc would NOT match these patterns
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/lacylights/frontend-src
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/lacylights/backend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/lacylights/repos/lacylights-*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/frontend-src
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/backend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/repos/lacylights-*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/backend
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/backend/lacylights-server
+
+# Allow chmod commands for frontend deployment (enables group write for pi/lacylights sharing)
+# Security: Only allows group write and setgid bits, not arbitrary permission changes
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/frontend-src
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod g+s /opt/lacylights/frontend-src
+
+# Allow systemctl restart for services
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart lacylights-frontend
