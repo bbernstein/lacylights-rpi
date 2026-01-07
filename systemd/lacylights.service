@@ -34,8 +34,10 @@ SyslogIdentifier=lacylights
 # The sudoers file restricts which commands can be run with elevated privileges
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/opt/lacylights
+# ProtectHome=read-only allows access to /home but not modification (except via ReadWritePaths)
+ProtectHome=read-only
+# Allow write access to lacylights directories, npm cache, and sudo timestamps
+ReadWritePaths=/opt/lacylights /home/lacylights /run/sudo
 
 # Resource limits
 LimitNOFILE=65536

@@ -18,3 +18,19 @@ lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl start lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl is-active lacylights-frontend
 lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
+
+# Allow update script to manage directories and ownership for npm cache and lacylights dirs
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /home/lacylights/.npm
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/lacylights/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /home/lacylights/.npm
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R lacylights\:lacylights /opt/lacylights/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown lacylights\:lacylights /opt/lacylights/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chown -R [0-9]*\:[0-9]* /home/lacylights/.npm
+
+# Allow chmod commands for frontend deployment
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod -R g+w /opt/lacylights/*
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/chmod g+s /opt/lacylights/*
+
+# Allow systemctl restart for services
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart lacylights
+lacylights ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart lacylights-frontend
