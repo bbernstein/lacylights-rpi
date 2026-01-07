@@ -36,7 +36,10 @@ PrivateTmp=true
 ProtectSystem=strict
 # ProtectHome=read-only allows access to /home but not modification (except via ReadWritePaths)
 ProtectHome=read-only
-# Allow write access to lacylights directories, npm cache, and sudo timestamps
+# Allow write access to:
+#   - /opt/lacylights: deployment directories
+#   - /home/lacylights: npm cache for updates
+#   - /run/sudo: required for sudo timestamp files (sudo needs to cache auth tokens)
 ReadWritePaths=/opt/lacylights /home/lacylights /run/sudo
 
 # Resource limits
