@@ -11,7 +11,7 @@ LacyLights RPi is a **production deployment platform** for running LacyLights on
 - Downloads releases from dist.lacylights.com (lacylights-terraform infrastructure)
 - Hosts two application components:
   - lacylights-go (backend API server)
-  - lacylights-fe (web frontend as static files)
+  - lacylights-fe (web frontend via Next.js server)
 - Manages systemd services for automatic startup
 - Configures dual-network (WiFi for internet + Ethernet for DMX)
 - Provides diagnostic and maintenance utilities
@@ -92,7 +92,7 @@ lacylights-rpi/
 | Path | Purpose |
 |------|---------|
 | `/opt/lacylights/backend/` | Go backend binary and data |
-| `/opt/lacylights/frontend-src/` | Frontend static files |
+| `/opt/lacylights/frontend-src/` | Frontend application files |
 | `/etc/systemd/system/lacylights.service` | systemd service |
 | `/etc/sudoers.d/lacylights` | WiFi management permissions |
 | `~/lacylights-setup/` | Setup scripts and utilities |
@@ -121,14 +121,18 @@ Traffic automatically routes:
 - Version detection from `VERSION` file
 
 ### Environment Variables (on Pi)
+
+Backend runtime environment variables are loaded from a `.env` file. See `config/.env.example` for all available options.
+
 ```bash
 # /opt/lacylights/backend/.env
 DATABASE_URL="file:./prisma/lacylights.db"
 PORT=4000
-NODE_ENV=production
 ARTNET_ENABLED=true
 ARTNET_BROADCAST=192.168.1.255
+ARTNET_REFRESH_RATE=40
 DMX_UNIVERSE_COUNT=4
+LOG_LEVEL=info
 WIFI_ENABLED=true
 WIFI_DEVICE=wlan0
 ```
@@ -197,7 +201,7 @@ sudo journalctl -u lacylights -f   # Follow logs
 - Application code changes go to lacylights-go or lacylights-fe
 - Scripts download pre-built releases from dist.lacylights.com
 - The Go backend is a compiled binary (no build on Pi)
-- Frontend is served as static files
+- Frontend runs via Next.js server (Nginx proxies to port 3000)
 
 ## Common Tasks
 
