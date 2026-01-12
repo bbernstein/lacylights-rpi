@@ -35,11 +35,13 @@ sudo ./scripts/setup-local-pi.sh                 # Local setup
 
 ### Modular Setup Scripts
 ```bash
+sudo ./setup/00-wifi-setup.sh         # Initial WiFi configuration
 sudo ./setup/01-system-setup.sh       # Install dependencies
 sudo ./setup/02-network-setup.sh      # Configure networking
 sudo ./setup/03-database-setup.sh     # Setup SQLite
 sudo ./setup/04-permissions-setup.sh  # User and permissions
 sudo ./setup/05-service-install.sh    # Install systemd service
+sudo ./setup/06-nginx-setup.sh        # Configure Nginx reverse proxy
 ```
 
 ### Utilities (Run on Pi)
@@ -63,11 +65,13 @@ lacylights-rpi/
 │   ├── setup-local-pi.sh   # Fresh Pi setup (local)
 │   └── create-image.sh     # Create SD card image
 ├── setup/
+│   ├── 00-wifi-setup.sh        # WiFi configuration
 │   ├── 01-system-setup.sh      # System packages
 │   ├── 02-network-setup.sh     # Network config
 │   ├── 03-database-setup.sh    # Database setup
 │   ├── 04-permissions-setup.sh # Permissions
-│   └── 05-service-install.sh   # systemd service
+│   ├── 05-service-install.sh   # systemd service
+│   └── 06-nginx-setup.sh       # Nginx reverse proxy
 ├── systemd/
 │   └── lacylights.service  # systemd service definition
 ├── config/
