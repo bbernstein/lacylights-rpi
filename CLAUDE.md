@@ -4,14 +4,19 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Project Overview
 
-LacyLights RPi contains deployment scripts and configuration for running LacyLights on Raspberry Pi hardware as a turnkey stage lighting solution. This is not an application repository - it's a deployment and operations toolset.
+LacyLights RPi is a **production deployment platform** for running LacyLights on Raspberry Pi hardware as a turnkey stage lighting controller. It provides deployment scripts, systemd service configuration, and management utilities for a dedicated lighting appliance.
 
 **Role in LacyLights Ecosystem:**
-- Deploys lacylights-go backend to Raspberry Pi
-- Deploys lacylights-fe frontend as static build
+- **Production platform** for Raspberry Pi (parallel to lacylights-mac for macOS)
+- Downloads releases from dist.lacylights.com (lacylights-terraform infrastructure)
+- Hosts two application components:
+  - lacylights-go (backend API server)
+  - lacylights-fe (web frontend as static files)
 - Manages systemd services for automatic startup
-- Configures networking (WiFi + Ethernet for DMX)
+- Configures dual-network (WiFi for internet + Ethernet for DMX)
 - Provides diagnostic and maintenance utilities
+
+**Note:** This is NOT a development environment. Development can be done on any OS by running the component repos directly. This platform is for end users running LacyLights in production.
 
 ## Development Commands
 
