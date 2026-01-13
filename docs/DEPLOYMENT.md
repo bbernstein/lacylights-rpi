@@ -121,7 +121,7 @@ cd ../lacylights-rpi
 cd lacylights-fe
 # Make changes
 git add .
-git commit -m "Add: new scene editor"
+git commit -m "Add: new look editor"
 cd ../lacylights-rpi
 ./scripts/deploy.sh --frontend-only
 ```

@@ -84,7 +84,7 @@ open http://lacylights.local/
 
 Verify:
 - Web interface loads
-- Can create/edit scenes
+- Can create/edit looks
 - DMX output works (if you have fixtures connected)
 
 ### Step 5: Create the Disk Image

@@ -10,7 +10,7 @@ This repository contains everything needed to deploy and run LacyLights on Raspb
 
 LacyLights is a complete stage lighting control system with:
 - DMX/Art-Net protocol support for professional lighting fixtures
-- Web-based interface for scene creation and cue management
+- Web-based interface for look creation and cue management
 - WiFi configuration for internet connectivity
 - Real-time lighting control and playback
 
