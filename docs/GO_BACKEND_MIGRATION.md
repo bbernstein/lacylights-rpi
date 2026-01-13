@@ -418,7 +418,7 @@ sudo ./setup/05-service-install-go.sh
 
 No. The Go backend is 100% API compatible with the Node.js backend. Your existing frontend will work without any changes.
 
-### Will my lighting cues and scenes work?
+### Will my lighting cues and looks work?
 
 Yes. The database schema is identical, so all your existing projects, looks, fixtures, and cues will work exactly as before.
 
