@@ -226,7 +226,7 @@ curl -X POST -H "Content-Type: application/json" \
 ### Verify Everything Works
 
 1. **Web Interface**: Open http://lacylights.local
-2. **Check Projects**: Verify all your projects, scenes, and fixtures are present
+2. **Check Projects**: Verify all your projects, looks, and fixtures are present
 3. **Test DMX Output**: Send a test cue to ensure DMX/Art-Net still works
 4. **Check WiFi**: Ensure WiFi configuration is still working
 
@@ -418,9 +418,9 @@ sudo ./setup/05-service-install-go.sh
 
 No. The Go backend is 100% API compatible with the Node.js backend. Your existing frontend will work without any changes.
 
-### Will my lighting cues and scenes work?
+### Will my lighting cues and looks work?
 
-Yes. The database schema is identical, so all your existing projects, scenes, fixtures, and cues will work exactly as before.
+Yes. The database schema is identical, so all your existing projects, looks, fixtures, and cues will work exactly as before.
 
 ### Can I switch back to Node.js?
 

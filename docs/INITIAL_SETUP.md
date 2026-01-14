@@ -507,7 +507,7 @@ After successful installation:
 
 1. **Configure Art-Net** - Set broadcast address in Settings
 2. **Add Fixtures** - Define your DMX fixtures
-3. **Create Scenes** - Build lighting scenes
+3. **Create Looks** - Build lighting looks
 4. **Test WiFi** - Configure and test WiFi connectivity
 5. **Read Documentation**:
    - [DEPLOYMENT.md](DEPLOYMENT.md) - Deploy code changes
