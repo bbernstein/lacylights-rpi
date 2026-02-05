@@ -516,6 +516,13 @@ DMX_UNIVERSE_COUNT=4
 # WiFi
 WIFI_ENABLED=true
 WIFI_DEVICE=wlan0
+
+# Authentication (optional - disabled by default)
+AUTH_ENABLED=false
+DEVICE_AUTH_ENABLED=true
+# JWT_SECRET=<generated-during-setup>
+# DEFAULT_ADMIN_EMAIL=admin@lacylights.local
+# DEFAULT_ADMIN_PASSWORD=<set-during-setup>
 ```
 
 See [config/.env.example](config/.env.example) for all options.
@@ -647,6 +654,80 @@ For more issues, see [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - ✅ Random database password
 - ✅ Limited sudo access (WiFi only)
 - ✅ systemd security restrictions
+
+### Device Authentication (Optional)
+
+LacyLights supports device-based authentication for environments where network access control is needed. During installation, you'll be prompted to enable this feature.
+
+**When to use device authentication:**
+- Shared networks with untrusted devices
+- Multi-user environments requiring access control
+- Audit trail requirements for lighting changes
+- Enterprise deployments
+
+**When to skip authentication (default):**
+- Isolated/dedicated lighting network
+- Single-user or trusted crew environment
+- Development and testing
+- Simple turnkey setups
+
+#### Enabling Authentication During Installation
+
+During the `05-service-install.sh` step, you'll be asked:
+
+```
+Enable device authentication? (y/N):
+```
+
+If you choose "y":
+1. A secure JWT secret is generated automatically
+2. You'll be prompted for admin email and password
+3. New devices must register and be approved
+
+#### Enabling/Disabling Authentication After Installation
+
+Edit the environment file:
+
+```bash
+sudo nano /opt/lacylights/backend/.env
+```
+
+**To enable authentication:**
+```bash
+AUTH_ENABLED=true
+DEVICE_AUTH_ENABLED=true
+JWT_SECRET=<your-secret>   # Generate with: openssl rand -base64 32
+DEFAULT_ADMIN_EMAIL=admin@lacylights.local
+DEFAULT_ADMIN_PASSWORD=<your-password>
+```
+
+**To disable authentication:**
+```bash
+AUTH_ENABLED=false
+```
+
+After changing, restart the service:
+```bash
+sudo systemctl restart lacylights
+```
+
+#### Device Registration Flow (When Auth Enabled)
+
+1. **New device connects** to LacyLights
+2. **Device registers** with a name (e.g., "Stage Manager iPad")
+3. **Admin approves** the device via web interface
+4. **Device has access** - automatically recognized on future connections
+
+#### Managing Devices
+
+Access the device management panel in the web interface at:
+- **http://lacylights.local/admin/devices**
+
+From here you can:
+- View pending device registrations
+- Approve or reject new devices
+- Revoke access for existing devices
+- See device activity and last connection times
 
 ### Additional Hardening (Optional)
 
