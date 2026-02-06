@@ -58,6 +58,7 @@ configure_device_auth() {
         echo
     else
         print_info "Non-interactive mode - using default (no authentication)"
+        print_info "To enable authentication in non-interactive mode, manually edit $env_file"
         ENABLE_AUTH="n"
     fi
 
@@ -102,9 +103,13 @@ configure_device_auth() {
                 PASSWORD_VALID=true
             done
         else
-            print_warning "Non-interactive mode - cannot set admin password"
-            print_warning "You must set DEFAULT_ADMIN_PASSWORD in $env_file manually"
-            ADMIN_PASSWORD=""
+            # Non-interactive mode: cannot set password, so disable authentication
+            print_warning "Non-interactive mode - cannot set admin password interactively"
+            print_warning "Disabling authentication to prevent unusable admin account"
+            print_warning "To enable authentication later, manually edit $env_file"
+            print_info "Device authentication disabled (non-interactive mode)"
+            print_info "All clients on the network will have full access"
+            return 0
         fi
 
         # Update .env file with authentication settings
@@ -112,39 +117,38 @@ configure_device_auth() {
 
         # Use sed to update the values in the .env file
         sudo sed -i "s/^AUTH_ENABLED=false/AUTH_ENABLED=true/" "$env_file"
-        sudo sed -i "s/^DEVICE_AUTH_ENABLED=true/DEVICE_AUTH_ENABLED=true/" "$env_file"
+        sudo sed -i "s/^DEVICE_AUTH_ENABLED=false/DEVICE_AUTH_ENABLED=true/" "$env_file"
 
-        # Add or update JWT_SECRET
-        if grep -q "^# JWT_SECRET=" "$env_file"; then
-            sudo sed -i "s|^# JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|" "$env_file"
-        elif grep -q "^JWT_SECRET=" "$env_file"; then
-            sudo sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|" "$env_file"
-        else
-            echo "JWT_SECRET=$JWT_SECRET" | sudo tee -a "$env_file" > /dev/null
-        fi
+        # Function to safely update or add a config value
+        # Uses a temp file approach to handle special characters safely
+        update_env_value() {
+            local key="$1"
+            local value="$2"
+            local file="$3"
 
-        # Add or update admin email
-        if grep -q "^# DEFAULT_ADMIN_EMAIL=" "$env_file"; then
-            sudo sed -i "s|^# DEFAULT_ADMIN_EMAIL=.*|DEFAULT_ADMIN_EMAIL=$ADMIN_EMAIL|" "$env_file"
-        elif grep -q "^DEFAULT_ADMIN_EMAIL=" "$env_file"; then
-            sudo sed -i "s|^DEFAULT_ADMIN_EMAIL=.*|DEFAULT_ADMIN_EMAIL=$ADMIN_EMAIL|" "$env_file"
-        else
-            echo "DEFAULT_ADMIN_EMAIL=$ADMIN_EMAIL" | sudo tee -a "$env_file" > /dev/null
-        fi
+            # Remove any existing line (commented or not) for this key
+            sudo sed -i "/^#\? *${key}=/d" "$file"
+            # Append the new value
+            echo "${key}=${value}" | sudo tee -a "$file" > /dev/null
+        }
 
-        # Add or update admin password (only if set)
+        # Update JWT_SECRET (base64 may contain +, /, = but not |)
+        update_env_value "JWT_SECRET" "$JWT_SECRET" "$env_file"
+
+        # Update admin email
+        update_env_value "DEFAULT_ADMIN_EMAIL" "$ADMIN_EMAIL" "$env_file"
+
+        # Update admin password (only if set)
+        # Note: Password is stored in plaintext; the backend hashes it on first use
         if [ -n "$ADMIN_PASSWORD" ]; then
-            if grep -q "^# DEFAULT_ADMIN_PASSWORD=" "$env_file"; then
-                sudo sed -i "s|^# DEFAULT_ADMIN_PASSWORD=.*|DEFAULT_ADMIN_PASSWORD=$ADMIN_PASSWORD|" "$env_file"
-            elif grep -q "^DEFAULT_ADMIN_PASSWORD=" "$env_file"; then
-                sudo sed -i "s|^DEFAULT_ADMIN_PASSWORD=.*|DEFAULT_ADMIN_PASSWORD=$ADMIN_PASSWORD|" "$env_file"
-            else
-                echo "DEFAULT_ADMIN_PASSWORD=$ADMIN_PASSWORD" | sudo tee -a "$env_file" > /dev/null
-            fi
+            update_env_value "DEFAULT_ADMIN_PASSWORD" "$ADMIN_PASSWORD" "$env_file"
         fi
 
         print_success "Device authentication enabled"
         print_info "Admin email: $ADMIN_EMAIL"
+        print_info ""
+        print_warning "SECURITY NOTE: The admin password is stored in plaintext in $env_file"
+        print_warning "Ensure file permissions are set to 600 (only readable by lacylights user)"
         print_info ""
         print_info "After the service starts:"
         print_info "  1. New devices will need to register"
