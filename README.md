@@ -706,6 +706,8 @@ DEFAULT_ADMIN_PASSWORD=<your-password>
 AUTH_ENABLED=false
 ```
 
+> **Note:** `DEVICE_AUTH_ENABLED` is only effective when `AUTH_ENABLED=true`, so it does not need to be changed when disabling authentication.
+
 After changing, restart the service:
 ```bash
 sudo systemctl restart lacylights

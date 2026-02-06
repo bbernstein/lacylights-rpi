@@ -67,6 +67,14 @@ configure_device_auth() {
 
         # Generate secure JWT secret
         print_info "Generating secure JWT secret..."
+
+        # Ensure openssl is available for JWT secret generation
+        if ! command -v openssl > /dev/null 2>&1; then
+            print_error "openssl is required for JWT secret generation but was not found"
+            print_info "Please install openssl (e.g., sudo apt-get install openssl) and re-run this script."
+            exit 1
+        fi
+
         JWT_SECRET=$(openssl rand -base64 32)
 
         # Prompt for admin email
@@ -115,12 +123,8 @@ configure_device_auth() {
         # Update .env file with authentication settings
         print_info "Updating environment configuration..."
 
-        # Use sed to update the values in the .env file
-        sudo sed -i "s/^AUTH_ENABLED=false/AUTH_ENABLED=true/" "$env_file"
-        sudo sed -i "s/^DEVICE_AUTH_ENABLED=false/DEVICE_AUTH_ENABLED=true/" "$env_file"
-
         # Function to safely update or add a config value
-        # Uses a temp file approach to handle special characters safely
+        # Uses delete-and-append approach to handle special characters safely
         update_env_value() {
             local key="$1"
             local value="$2"
@@ -128,9 +132,13 @@ configure_device_auth() {
 
             # Remove any existing line (commented or not) for this key
             sudo sed -i "/^#\? *${key}=/d" "$file"
-            # Append the new value
-            echo "${key}=${value}" | sudo tee -a "$file" > /dev/null
+            # Append the new value using printf for proper special character handling
+            printf '%s=%s\n' "${key}" "${value}" | sudo tee -a "$file" > /dev/null
         }
+
+        # Update authentication settings in the .env file
+        sudo sed -i "s/^AUTH_ENABLED=false/AUTH_ENABLED=true/" "$env_file"
+        update_env_value "DEVICE_AUTH_ENABLED" "true" "$env_file"
 
         # Update JWT_SECRET (base64 may contain +, /, = but not |)
         update_env_value "JWT_SECRET" "$JWT_SECRET" "$env_file"
