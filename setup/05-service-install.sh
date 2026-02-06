@@ -24,11 +24,148 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
 print_header() {
     echo ""
     echo -e "${BLUE}========================================${NC}"
     echo -e "${BLUE}$1${NC}"
     echo -e "${BLUE}========================================${NC}"
+}
+
+# Function to configure device authentication
+configure_device_auth() {
+    local env_file="$1"
+
+    print_header "Device Authentication Configuration"
+    print_info ""
+    print_info "LacyLights supports two operating modes:"
+    print_info ""
+    print_info "  ${GREEN}No Authentication (default)${NC}"
+    print_info "    - All clients on the network have full access"
+    print_info "    - Best for isolated networks and single-user setups"
+    print_info ""
+    print_info "  ${YELLOW}Device Authentication${NC}"
+    print_info "    - Devices must register and be approved by admin"
+    print_info "    - Best for shared networks or multi-user environments"
+    print_info ""
+
+    # Check if running interactively
+    if [ -t 0 ]; then
+        read -p "Enable device authentication? (y/N): " -n 1 -r ENABLE_AUTH
+        echo
+    else
+        print_info "Non-interactive mode - using default (no authentication)"
+        print_info "To enable authentication in non-interactive mode, manually edit $env_file"
+        ENABLE_AUTH="n"
+    fi
+
+    if [[ $ENABLE_AUTH =~ ^[Yy]$ ]]; then
+        print_info "Configuring device authentication..."
+
+        # Generate secure JWT secret
+        print_info "Generating secure JWT secret..."
+
+        # Ensure openssl is available for JWT secret generation
+        if ! command -v openssl > /dev/null 2>&1; then
+            print_error "openssl is required for JWT secret generation but was not found"
+            print_info "Please install openssl (e.g., sudo apt-get install openssl) and re-run this script."
+            exit 1
+        fi
+
+        JWT_SECRET=$(openssl rand -base64 32)
+
+        # Prompt for admin email
+        local DEFAULT_EMAIL="admin@lacylights.local"
+        if [ -t 0 ]; then
+            read -r -p "Admin email (default: $DEFAULT_EMAIL): " ADMIN_EMAIL
+        else
+            ADMIN_EMAIL=""
+        fi
+        ADMIN_EMAIL="${ADMIN_EMAIL:-$DEFAULT_EMAIL}"
+
+        # Prompt for admin password with validation
+        # Note: This block only runs in interactive mode since non-interactive mode
+        # sets ENABLE_AUTH="n" and skips the entire if block
+        local PASSWORD_VALID=false
+        local ADMIN_PASSWORD=""
+        local ADMIN_PASSWORD_CONFIRM=""
+
+        while [ "$PASSWORD_VALID" = false ]; do
+            read -r -sp "Admin password (minimum 8 characters): " ADMIN_PASSWORD
+            echo
+
+            if [ ${#ADMIN_PASSWORD} -lt 8 ]; then
+                print_error "Password must be at least 8 characters long"
+                continue
+            fi
+
+            read -r -sp "Confirm password: " ADMIN_PASSWORD_CONFIRM
+            echo
+
+            if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+                print_error "Passwords do not match"
+                continue
+            fi
+
+            PASSWORD_VALID=true
+        done
+        # Clear the confirmation variable after use
+        unset ADMIN_PASSWORD_CONFIRM
+
+        # Update .env file with authentication settings
+        print_info "Updating environment configuration..."
+
+        # Function to safely update or add a config value
+        # Uses delete-and-append approach to handle special characters safely
+        update_env_value() {
+            local key="$1"
+            local value="$2"
+            local file="$3"
+
+            # Remove any existing line (commented or not) for this key
+            sudo sed -i "/^#\? *${key}=/d" "$file"
+            # Append the new value using printf for proper special character handling
+            printf '%s=%s\n' "${key}" "${value}" | sudo tee -a "$file" > /dev/null
+        }
+
+        # Update authentication settings in the .env file
+        sudo sed -i "s/^AUTH_ENABLED=false/AUTH_ENABLED=true/" "$env_file"
+        update_env_value "DEVICE_AUTH_ENABLED" "true" "$env_file"
+
+        # Update JWT_SECRET (base64 may contain +, /, = but not |)
+        update_env_value "JWT_SECRET" "$JWT_SECRET" "$env_file"
+
+        # Update admin email
+        update_env_value "DEFAULT_ADMIN_EMAIL" "$ADMIN_EMAIL" "$env_file"
+
+        # Update admin password (only if set)
+        # Note: Password is stored in plaintext; the backend hashes it on first use
+        if [ -n "$ADMIN_PASSWORD" ]; then
+            update_env_value "DEFAULT_ADMIN_PASSWORD" "$ADMIN_PASSWORD" "$env_file"
+        fi
+
+        # Clear sensitive variables from memory
+        unset JWT_SECRET ADMIN_PASSWORD
+
+        print_success "Device authentication enabled"
+        print_info "Admin email: $ADMIN_EMAIL"
+        print_info ""
+        print_warning "SECURITY NOTE: The admin password is stored in plaintext in $env_file"
+        print_warning "The backend will hash it when creating the admin account, but the"
+        print_warning "plaintext value remains in the file. Consider clearing it after first login."
+        print_warning "Ensure file permissions are set to 600 (only readable by lacylights user)"
+        print_info ""
+        print_info "After the service starts:"
+        print_info "  1. New devices will need to register"
+        print_info "  2. Admin must approve devices via the web interface"
+        print_info "  3. Approved devices can access the system automatically"
+    else
+        print_info "Device authentication disabled (default)"
+        print_info "All clients on the network will have full access"
+    fi
 }
 
 print_header "LacyLights Service Installation"
@@ -64,6 +201,7 @@ fi
 # Create .env file from template if it doesn't exist
 print_info "Setting up environment configuration..."
 
+ENV_FILE_CREATED=false
 if [ ! -f /opt/lacylights/backend/.env ]; then
     if [ -f "$REPO_DIR/config/.env.example" ]; then
         sudo cp "$REPO_DIR/config/.env.example" /opt/lacylights/backend/.env
@@ -77,13 +215,21 @@ if [ ! -f /opt/lacylights/backend/.env ]; then
         sudo chown lacylights:lacylights /opt/lacylights/backend/.env
         sudo chmod 600 /opt/lacylights/backend/.env
         print_success "Environment file created"
-        print_info "Please review and customize /opt/lacylights/backend/.env"
+        ENV_FILE_CREATED=true
     else
         print_error "Environment template not found"
         exit 1
     fi
 else
     print_success "Environment file already exists"
+fi
+
+# Configure device authentication (only for new installations)
+if [ "$ENV_FILE_CREATED" = true ]; then
+    configure_device_auth "/opt/lacylights/backend/.env"
+    # Ensure correct ownership after auth configuration
+    sudo chown lacylights:lacylights /opt/lacylights/backend/.env
+    sudo chmod 600 /opt/lacylights/backend/.env
 fi
 
 # Reload systemd
