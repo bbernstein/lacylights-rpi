@@ -87,42 +87,33 @@ configure_device_auth() {
         ADMIN_EMAIL="${ADMIN_EMAIL:-$DEFAULT_EMAIL}"
 
         # Prompt for admin password with validation
+        # Note: This block only runs in interactive mode since non-interactive mode
+        # sets ENABLE_AUTH="n" and skips the entire if block
         local PASSWORD_VALID=false
         local ADMIN_PASSWORD=""
         local ADMIN_PASSWORD_CONFIRM=""
 
-        if [ -t 0 ]; then
-            while [ "$PASSWORD_VALID" = false ]; do
-                read -r -sp "Admin password (minimum 8 characters): " ADMIN_PASSWORD
-                echo
+        while [ "$PASSWORD_VALID" = false ]; do
+            read -r -sp "Admin password (minimum 8 characters): " ADMIN_PASSWORD
+            echo
 
-                if [ ${#ADMIN_PASSWORD} -lt 8 ]; then
-                    print_error "Password must be at least 8 characters long"
-                    continue
-                fi
+            if [ ${#ADMIN_PASSWORD} -lt 8 ]; then
+                print_error "Password must be at least 8 characters long"
+                continue
+            fi
 
-                read -r -sp "Confirm password: " ADMIN_PASSWORD_CONFIRM
-                echo
+            read -r -sp "Confirm password: " ADMIN_PASSWORD_CONFIRM
+            echo
 
-                if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
-                    print_error "Passwords do not match"
-                    continue
-                fi
+            if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+                print_error "Passwords do not match"
+                continue
+            fi
 
-                PASSWORD_VALID=true
-            done
-            # Clear the confirmation variable after use
-            unset ADMIN_PASSWORD_CONFIRM
-        else
-            # Non-interactive mode: cannot set password, so disable authentication
-            print_warning "Non-interactive mode - cannot set admin password interactively"
-            print_warning "Disabling authentication to prevent unusable admin account"
-            print_warning "To enable authentication later, manually edit $env_file"
-            print_info "Device authentication disabled (non-interactive mode)"
-            print_info "All clients on the network will have full access"
-            ENABLE_AUTH="n"
-            return 0
-        fi
+            PASSWORD_VALID=true
+        done
+        # Clear the confirmation variable after use
+        unset ADMIN_PASSWORD_CONFIRM
 
         # Update .env file with authentication settings
         print_info "Updating environment configuration..."
