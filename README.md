@@ -713,6 +713,11 @@ After changing, restart the service:
 sudo systemctl restart lacylights
 ```
 
+> **Security note for existing installations:**
+> - Enabling `AUTH_ENABLED=true` on a system that was previously running without authentication will require all future access to use login credentials
+> - If you change `JWT_SECRET`, all existing sessions will be invalidated
+> - When enabling `DEVICE_AUTH_ENABLED=true`, previously connected devices may need to re-register
+
 #### Device Registration Flow (When Auth Enabled)
 
 1. **New device connects** to LacyLights

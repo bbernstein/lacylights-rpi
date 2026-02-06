@@ -89,6 +89,7 @@ configure_device_auth() {
         # Prompt for admin password with validation
         local PASSWORD_VALID=false
         local ADMIN_PASSWORD=""
+        local ADMIN_PASSWORD_CONFIRM=""
 
         if [ -t 0 ]; then
             while [ "$PASSWORD_VALID" = false ]; do
@@ -110,6 +111,8 @@ configure_device_auth() {
 
                 PASSWORD_VALID=true
             done
+            # Clear the confirmation variable after use
+            unset ADMIN_PASSWORD_CONFIRM
         else
             # Non-interactive mode: cannot set password, so disable authentication
             print_warning "Non-interactive mode - cannot set admin password interactively"
@@ -117,6 +120,7 @@ configure_device_auth() {
             print_warning "To enable authentication later, manually edit $env_file"
             print_info "Device authentication disabled (non-interactive mode)"
             print_info "All clients on the network will have full access"
+            ENABLE_AUTH="n"
             return 0
         fi
 
@@ -152,10 +156,15 @@ configure_device_auth() {
             update_env_value "DEFAULT_ADMIN_PASSWORD" "$ADMIN_PASSWORD" "$env_file"
         fi
 
+        # Clear sensitive variables from memory
+        unset JWT_SECRET ADMIN_PASSWORD
+
         print_success "Device authentication enabled"
         print_info "Admin email: $ADMIN_EMAIL"
         print_info ""
         print_warning "SECURITY NOTE: The admin password is stored in plaintext in $env_file"
+        print_warning "The backend will hash it when creating the admin account, but the"
+        print_warning "plaintext value remains in the file. Consider clearing it after first login."
         print_warning "Ensure file permissions are set to 600 (only readable by lacylights user)"
         print_info ""
         print_info "After the service starts:"
