@@ -59,13 +59,16 @@ shopt -u nullglob
 
 GENERATED_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-# Newest first; version breaks releaseDate ties so output is deterministic
+# Newest first. Version breaks releaseDate ties so output is deterministic;
+# numeric parts compare as numbers so 0.2.19 sorts above 0.2.9.
 jq -n \
     --arg component "$COMPONENT" \
     --arg generated "$GENERATED_DATE" \
-    '[inputs] | sort_by([(.releaseDate // ""), .version]) | reverse
+    '[inputs]
+     | sort_by([(.releaseDate // ""), (.version | [splits("[.+-]") | tonumber? // .])])
+     | reverse
      | {component: $component, generated: $generated, count: length, versions: .}' \
-    ${VALID_FILES[@]+"${VALID_FILES[@]}"} > "$OUTPUT_DIR/versions.json"
+    ${VALID_FILES[@]+"${VALID_FILES[@]}"} < /dev/null > "$OUTPUT_DIR/versions.json"
 
 cp "$SCRIPT_DIR/index.html" "$OUTPUT_DIR/index.html"
 

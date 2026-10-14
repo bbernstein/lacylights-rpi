@@ -471,6 +471,7 @@ jobs:
 
           echo "Downloading release metadata..."
           mkdir -p release-index-meta release-index-out
+          # Later filters win: keep top-level *.json only, skip nested keys
           aws s3 cp "s3://${BUCKET}/releases/${COMPONENT}/" release-index-meta/ \
             --recursive --exclude "*" --include "*.json" --exclude "*/*" --quiet
 

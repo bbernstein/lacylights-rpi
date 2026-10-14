@@ -120,16 +120,18 @@ assert_eq "0.2.19" "$(jq -r '[.versions[].version] | join(",")' "$CASE_DIR/out/v
 new_case "deterministic sort"
 write_meta "0.2.1" "2025-12-10T16:12:01Z" false
 write_meta "0.2.2" "2025-12-10T16:12:01Z" false
+write_meta "0.2.10" "2025-12-10T16:12:01Z" false
 echo '{"version":"0.0.1","url":"https://dist.lacylights.com/old.tar.gz","isPrerelease":false}' \
     > "$CASE_DIR/meta/0.0.1.json"
 "$GENERATE" "$CASE_DIR/meta" "$CASE_DIR/out" >/dev/null
 
-assert_eq "0.2.2,0.2.1,0.0.1" "$(jq -r '[.versions[].version] | join(",")' "$CASE_DIR/out/versions.json")" \
-    "ties broken by version and missing releaseDate sorts last"
+assert_eq "0.2.10,0.2.2,0.2.1,0.0.1" "$(jq -r '[.versions[].version] | join(",")' "$CASE_DIR/out/versions.json")" \
+    "ties broken by numeric version and missing releaseDate sorts last"
 
 # --- Empty metadata directory still produces a valid page ---
 new_case "empty"
-"$GENERATE" "$CASE_DIR/meta" "$CASE_DIR/out" >/dev/null
+# Stdin must be ignored: with no files, jq would otherwise read it (or hang)
+echo '{"version":"from-stdin"}' | "$GENERATE" "$CASE_DIR/meta" "$CASE_DIR/out" >/dev/null
 assert_eq "0" "$(jq -r '.count' "$CASE_DIR/out/versions.json")" "empty directory yields zero versions"
 assert_eq "[]" "$(jq -c '.versions' "$CASE_DIR/out/versions.json")" "empty directory yields empty array"
 assert_file "$CASE_DIR/out/index.html" "index.html written for empty directory"
