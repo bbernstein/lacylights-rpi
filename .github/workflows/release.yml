@@ -451,6 +451,39 @@ jobs:
 
           echo "✓ DynamoDB updated: component=$COMPONENT, version=$VERSION"
 
+      # CloudFront rewrites /releases/rpi/ to /releases/rpi/index.html; without
+      # this object the download page returns AccessDenied.
+      - name: Update download page
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DIST_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DIST_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_DIST_REGION }}
+        run: |
+          set -e
+          COMPONENT="rpi"
+          BUCKET="${{ secrets.AWS_DIST_BUCKET }}"
+
+          echo "Downloading release metadata..."
+          mkdir -p release-index-meta release-index-out
+          aws s3 cp "s3://${BUCKET}/releases/${COMPONENT}/" release-index-meta/ \
+            --recursive --exclude "*" --include "*.json" --quiet
+
+          release-index/generate.sh release-index-meta release-index-out
+
+          aws s3 cp release-index-out/versions.json \
+            "s3://${BUCKET}/releases/${COMPONENT}/versions.json" \
+            --content-type "application/json" \
+            --cache-control "max-age=300, must-revalidate" \
+            --metadata-directive REPLACE
+
+          aws s3 cp release-index-out/index.html \
+            "s3://${BUCKET}/releases/${COMPONENT}/index.html" \
+            --content-type "text/html" \
+            --cache-control "max-age=300, must-revalidate" \
+            --metadata-directive REPLACE
+
+          echo "✓ Download page updated at https://dist.lacylights.com/releases/${COMPONENT}/"
+
       - name: Output release URL
         run: |
           echo "✅ Release created successfully!"
