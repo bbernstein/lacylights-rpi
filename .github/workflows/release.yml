@@ -24,6 +24,12 @@ on:
 permissions:
   contents: write
 
+# Serialize releases: each run rebuilds versions.json from S3, so an
+# overlapping run could upload a manifest missing the other's release.
+concurrency:
+  group: release-rpi
+  cancel-in-progress: false
+
 jobs:
   create-release:
     runs-on: ubuntu-latest
@@ -466,7 +472,7 @@ jobs:
           echo "Downloading release metadata..."
           mkdir -p release-index-meta release-index-out
           aws s3 cp "s3://${BUCKET}/releases/${COMPONENT}/" release-index-meta/ \
-            --recursive --exclude "*" --include "*.json" --quiet
+            --recursive --exclude "*" --include "*.json" --exclude "*/*" --quiet
 
           release-index/generate.sh release-index-meta release-index-out
 

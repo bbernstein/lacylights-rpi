@@ -34,32 +34,38 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 
-VERSIONS_JSON="[]"
+# A metadata file must hold exactly one object with the fields the page needs.
+# The version ends up in a shell command visitors copy, so restrict its charset.
+VALID_METADATA='length == 1 and (.[0] | type == "object"
+    and (.version | type == "string" and test("^[0-9A-Za-z.+-]+$"))
+    and (.url | type == "string" and startswith("https://"))
+    and (.isPrerelease | type == "boolean"))'
+
+VALID_FILES=()
 shopt -s nullglob
 for FILE in "$METADATA_DIR"/*.json; do
     case "$(basename "$FILE")" in
         latest.json|prerelease.json|versions.json) continue ;;
     esac
 
-    # Only accept well-formed metadata that has the fields the page needs
-    if ! jq -e 'type == "object" and (.version | type == "string") and (.url | type == "string")' \
-        "$FILE" >/dev/null 2>&1; then
+    if ! jq -s -e "$VALID_METADATA" "$FILE" >/dev/null 2>&1; then
         echo "Warning: skipping invalid metadata file $(basename "$FILE")" >&2
         continue
     fi
 
-    VERSIONS_JSON=$(jq --slurpfile item "$FILE" '. + $item' <<<"$VERSIONS_JSON")
+    VALID_FILES+=("$FILE")
 done
 shopt -u nullglob
 
 GENERATED_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-jq \
+# Newest first; version breaks releaseDate ties so output is deterministic
+jq -n \
     --arg component "$COMPONENT" \
     --arg generated "$GENERATED_DATE" \
-    'sort_by(.releaseDate // "") | reverse
+    '[inputs] | sort_by([(.releaseDate // ""), .version]) | reverse
      | {component: $component, generated: $generated, count: length, versions: .}' \
-    <<<"$VERSIONS_JSON" > "$OUTPUT_DIR/versions.json"
+    ${VALID_FILES[@]+"${VALID_FILES[@]}"} > "$OUTPUT_DIR/versions.json"
 
 cp "$SCRIPT_DIR/index.html" "$OUTPUT_DIR/index.html"
 

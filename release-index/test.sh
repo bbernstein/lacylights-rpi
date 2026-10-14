@@ -101,6 +101,32 @@ case "$STDERR" in
     *) fail "warns about metadata missing url" ;;
 esac
 
+# --- Rejects metadata that is unsafe or would break the page ---
+new_case "rejected metadata"
+write_meta "0.2.19" "2026-01-07T16:54:53Z" false
+GOOD='{"version":"1.0.0","url":"https://dist.lacylights.com/x.tar.gz","isPrerelease":false}'
+printf 'null\n%s\n' "$GOOD" > "$CASE_DIR/meta/multi.json"
+echo '{"version":"1.0.1; rm -rf ~","url":"https://dist.lacylights.com/x.tar.gz","isPrerelease":false}' \
+    > "$CASE_DIR/meta/badversion.json"
+echo '{"version":"1.0.2","url":"javascript:alert(1)","isPrerelease":false}' > "$CASE_DIR/meta/badurl.json"
+echo '{"version":"1.0.3","url":"https://dist.lacylights.com/x.tar.gz","isPrerelease":"yes"}' \
+    > "$CASE_DIR/meta/badflag.json"
+"$GENERATE" "$CASE_DIR/meta" "$CASE_DIR/out" >/dev/null 2>&1
+
+assert_eq "0.2.19" "$(jq -r '[.versions[].version] | join(",")' "$CASE_DIR/out/versions.json")" \
+    "multi-value, unsafe version, non-https url and non-boolean prerelease are rejected"
+
+# --- Sorting is deterministic for missing and tied dates ---
+new_case "deterministic sort"
+write_meta "0.2.1" "2025-12-10T16:12:01Z" false
+write_meta "0.2.2" "2025-12-10T16:12:01Z" false
+echo '{"version":"0.0.1","url":"https://dist.lacylights.com/old.tar.gz","isPrerelease":false}' \
+    > "$CASE_DIR/meta/0.0.1.json"
+"$GENERATE" "$CASE_DIR/meta" "$CASE_DIR/out" >/dev/null
+
+assert_eq "0.2.2,0.2.1,0.0.1" "$(jq -r '[.versions[].version] | join(",")' "$CASE_DIR/out/versions.json")" \
+    "ties broken by version and missing releaseDate sorts last"
+
 # --- Empty metadata directory still produces a valid page ---
 new_case "empty"
 "$GENERATE" "$CASE_DIR/meta" "$CASE_DIR/out" >/dev/null
