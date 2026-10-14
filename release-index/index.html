@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LacyLights Raspberry Pi Releases</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+      padding: 2rem;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    h1 {
+      font-size: 2.5rem;
+      background: linear-gradient(90deg, #00d9ff, #00ff88);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+    h2 { font-size: 1.3rem; color: #fff; margin-bottom: 1rem; }
+    .subtitle { color: #aaa; font-size: 1.1rem; }
+    section { margin-bottom: 2rem; }
+    .install {
+      background: rgba(0,255,136,0.05);
+      border: 1px solid rgba(0,255,136,0.4);
+      border-radius: 10px;
+      padding: 1.5rem;
+    }
+    .install p { color: #aaa; margin-bottom: 1rem; line-height: 1.5; }
+    .install p.note { margin-top: 1rem; margin-bottom: 0; font-size: 0.9rem; }
+    .install a { color: #00d9ff; }
+    .command {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      background: rgba(0,0,0,0.4);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+    }
+    .command code {
+      flex: 1;
+      font-family: 'SF Mono', Monaco, Menlo, monospace;
+      font-size: 0.85rem;
+      color: #00ff88;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .copy-btn {
+      flex-shrink: 0;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #e0e0e0;
+      border-radius: 6px;
+      padding: 0.3rem 0.75rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,0.2); }
+    .loading { text-align: center; padding: 3rem; color: #aaa; }
+    .version-list { display: flex; flex-direction: column; gap: 1rem; }
+    .version-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 1.5rem;
+      transition: all 0.2s ease;
+    }
+    .version-card:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(0,217,255,0.3);
+    }
+    .version-card.latest {
+      border-color: rgba(0,255,136,0.4);
+      background: rgba(0,255,136,0.05);
+    }
+    .version-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .version-number { font-size: 1.4rem; font-weight: 600; color: #fff; }
+    .badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .badge.stable { background: rgba(0,255,136,0.2); color: #00ff88; }
+    .badge.beta { background: rgba(255,193,7,0.2); color: #ffc107; }
+    .badge.latest-tag { background: rgba(0,217,255,0.2); color: #00d9ff; margin-left: 0.5rem; }
+    .version-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 2rem;
+      color: #aaa;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: linear-gradient(90deg, #00d9ff, #00ff88);
+      color: #1a1a2e;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: opacity 0.2s;
+      margin-bottom: 1rem;
+    }
+    .download-btn:hover { opacity: 0.9; }
+    .checksum {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: rgba(0,0,0,0.3);
+      border-radius: 6px;
+      font-family: 'SF Mono', Monaco, monospace;
+      font-size: 0.75rem;
+      color: #aaa;
+      word-break: break-all;
+    }
+    .checksum-label { color: #999; }
+    footer {
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      color: #999;
+    }
+    footer a { color: #00d9ff; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    .no-releases { text-align: center; padding: 3rem; color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>LacyLights Raspberry Pi</h1>
+      <p class="subtitle">Turn a Raspberry Pi into a stage lighting controller</p>
+    </header>
+
+    <section class="install">
+      <h2>Install</h2>
+      <p>Run this single command in a terminal on your Raspberry Pi (64-bit Raspberry Pi OS). It downloads the latest stable release, verifies its checksum and sets up the system.</p>
+      <div class="command">
+        <code id="install-cmd">(set -o pipefail; curl -fsSL https://dist.lacylights.com/releases/rpi/install.sh | bash) &amp;&amp; cd ~/lacylights-setup &amp;&amp; sudo bash scripts/setup-local-pi.sh</code>
+        <button type="button" class="copy-btn" data-copy-target="install-cmd">Copy</button>
+      </div>
+      <p class="note">When setup finishes, open <strong>http://lacylights.local</strong> from any device on the same network. See the <a href="https://github.com/bbernstein/lacylights-rpi#readme">README</a> for remote installs, WiFi setup and troubleshooting.</p>
+    </section>
+
+    <section>
+      <h2>All releases</h2>
+      <div id="releases" class="loading">Loading releases...</div>
+    </section>
+
+    <footer>
+      <p>
+        <a href="https://github.com/bbernstein/lacylights-rpi">GitHub</a> |
+        <a href="versions.json">versions.json</a> |
+        <a href="latest.json">latest.json</a>
+      </p>
+    </footer>
+  </div>
+  <script>
+    // Escape HTML (including quotes, so values are safe inside attributes)
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Validate and sanitize URL
+    function sanitizeUrl(url) {
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+          return parsed.href;
+        }
+      } catch (e) {}
+      return '#';
+    }
+
+    function formatSize(bytes) {
+      const n = Number(bytes) || 0;
+      if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB';
+      return Math.max(1, Math.round(n / 1024)) + ' KB';
+    }
+
+    // Copy buttons: event delegation so dynamically rendered buttons work too
+    document.addEventListener('click', async (event) => {
+      const btn = event.target.closest('.copy-btn');
+      if (!btn) return;
+      const target = document.getElementById(btn.dataset.copyTarget);
+      if (!target) return;
+      try {
+        await navigator.clipboard.writeText(target.textContent);
+        btn.textContent = 'Copied';
+      } catch (e) {
+        btn.textContent = 'Select & copy';
+      }
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    });
+
+    async function loadReleases() {
+      const container = document.getElementById('releases');
+      try {
+        const response = await fetch('versions.json', { cache: 'no-cache' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+
+        if (!data.versions || data.versions.length === 0) {
+          container.innerHTML = '<div class="no-releases">No releases available yet.</div>';
+          return;
+        }
+
+        const latestStable = data.versions.find(v => !v.isPrerelease);
+
+        container.className = '';
+        container.innerHTML = '<div class="version-list">' +
+          data.versions.map((v, i) => {
+            const isLatestStable = latestStable && v.version === latestStable.version;
+            const date = v.releaseDate
+              ? new Date(v.releaseDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+              : 'unknown';
+            const url = sanitizeUrl(v.url);
+            const safeUrl = escapeHtml(url);
+            const filename = url === '#' ? 'download' : escapeHtml(url.split('/').pop() || 'download');
+            const safeVersion = escapeHtml(v.version || 'unknown');
+            const safeSha256 = escapeHtml(v.sha256 || 'N/A');
+            const isPrerelease = v.isPrerelease === true;
+            const cmdId = 'cmd-' + i;
+
+            return `
+              <div class="version-card ${isLatestStable ? 'latest' : ''}">
+                <div class="version-header">
+                  <span class="version-number">v${safeVersion}</span>
+                  <div>
+                    <span class="badge ${isPrerelease ? 'beta' : 'stable'}">${isPrerelease ? 'Beta' : 'Stable'}</span>
+                    ${isLatestStable ? '<span class="badge latest-tag">Latest</span>' : ''}
+                  </div>
+                </div>
+                <div class="version-meta">
+                  <span>Released: ${escapeHtml(date)}</span>
+                  <span>Size: ${escapeHtml(formatSize(v.fileSize))}</span>
+                </div>
+                <a href="${safeUrl}" class="download-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  Download ${filename}
+                </a>
+                <div class="command">
+                  <code id="${cmdId}">(set -o pipefail; curl -fsSL https://dist.lacylights.com/releases/rpi/install.sh | bash -s -- v${safeVersion}) &amp;&amp; cd ~/lacylights-setup &amp;&amp; sudo bash scripts/setup-local-pi.sh</code>
+                  <button type="button" class="copy-btn" data-copy-target="${cmdId}">Copy</button>
+                </div>
+                <div class="checksum">
+                  <span class="checksum-label">SHA256:</span> ${safeSha256}
+                </div>
+              </div>
+            `;
+          }).join('') + '</div>';
+      } catch (error) {
+        container.innerHTML = '<div class="no-releases">Error loading releases. Please try again later.</div>';
+        console.error('Error loading releases:', error);
+      }
+    }
+    loadReleases();
+  </script>
+</body>
+</html>
