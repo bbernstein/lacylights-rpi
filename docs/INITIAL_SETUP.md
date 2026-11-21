@@ -155,7 +155,7 @@ sudo bash 01-system-setup.sh
 ```
 
 This installs:
-- Node.js 20
+- Node.js 26
 - NetworkManager
 - Build tools
 

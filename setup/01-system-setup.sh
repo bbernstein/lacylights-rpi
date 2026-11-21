@@ -90,12 +90,12 @@ if command -v node &> /dev/null; then
             print_error "OFFLINE MODE: Cannot reinstall Node.js without internet"
             exit 1
         else
-            print_info "Reinstalling Node.js 20..."
-            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            print_info "Reinstalling Node.js 26..."
+            curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -
             sudo apt-get install -y nodejs
             print_success "Node.js installed: $(node -v)"
         fi
-    elif [ "$NODE_VERSION" -ge 18 ]; then
+    elif [ "$NODE_VERSION" -ge 26 ]; then
         print_success "Node.js $NODE_VERSION already installed ($(node -v))"
 
         # Check if npm is available
@@ -117,14 +117,13 @@ if command -v node &> /dev/null; then
             fi
         fi
     else
-        print_error "Node.js version $NODE_VERSION is too old (need 18+). Full version: $(node -v)"
+        print_warning "Node.js version $NODE_VERSION is older than 26. Full version: $(node -v)"
         if [ "$OFFLINE_MODE" = true ]; then
-            print_error "OFFLINE MODE: Cannot upgrade Node.js without internet"
-            print_error "Please install Node.js 18+ manually or run setup with internet access"
-            exit 1
+            print_warning "OFFLINE MODE: Cannot upgrade Node.js without internet; continuing with the existing version"
+            print_warning "The frontend is served as a static export, so this is not fatal. Upgrade to Node.js 26 when online"
         else
-            print_info "Upgrading Node.js from version $NODE_VERSION to 20..."
-            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            print_info "Upgrading Node.js from version $NODE_VERSION to 26..."
+            curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -
             sudo apt-get install -y nodejs
             print_success "Node.js upgraded: $(node -v)"
         fi
@@ -136,13 +135,13 @@ else
         print_error ""
         print_error "To prepare the Pi for offline setup, first run this with internet access:"
         print_error "  1. Connect Pi to internet temporarily"
-        print_error "  2. Run: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -"
+        print_error "  2. Run: curl -fsSL https://deb.nodesource.com/setup_26.x | sudo bash -"
         print_error "  3. Run: sudo apt-get install -y nodejs"
         print_error "  4. Disconnect from internet and retry"
         exit 1
     else
-        print_info "Installing Node.js 20..."
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        print_info "Installing Node.js 26..."
+        curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -
         sudo apt-get install -y nodejs
         print_success "Node.js installed: $(node -v)"
 
