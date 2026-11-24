@@ -36,8 +36,8 @@ The easiest approach is to prepare the base system before disconnecting from the
    # Update package lists
    sudo apt-get update
 
-   # Install Node.js 20
-   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
+   # Install Node.js 26
+   curl -fsSL https://deb.nodesource.com/setup_26.x | sudo bash -
    sudo apt-get install -y nodejs
 
    # Install NetworkManager
@@ -52,7 +52,7 @@ The easiest approach is to prepare the base system before disconnecting from the
 
 4. **Verify installation**:
    ```bash
-   node -v      # Should show v20.x.x or later
+   node -v      # Should show v26.x.x or later
    npm -v       # Should show npm version
    nmcli --version  # Should show NetworkManager version
    gcc --version    # Should show gcc version
@@ -130,7 +130,7 @@ For offline deployment to work, the Pi must have:
 
 | Package | Version | Check Command |
 |---------|---------|---------------|
-| Node.js | 18+ | `node -v` |
+| Node.js | 26+ | `node -v` |
 | npm | Any | `npm -v` |
 | NetworkManager | Any | `nmcli --version` |
 | gcc | Any | `gcc --version` |
@@ -143,7 +143,7 @@ For offline deployment to work, the Pi must have:
 
 - [ ] Raspberry Pi OS installed and booted
 - [ ] Connected to internet temporarily
-- [ ] Node.js 20 installed from nodesource
+- [ ] Node.js 26 installed from nodesource
 - [ ] NetworkManager installed
 - [ ] Build tools installed (build-essential, git, curl)
 - [ ] (Optional) Nginx installed
@@ -163,7 +163,7 @@ For offline deployment to work, the Pi must have:
 
 The Pi needs Node.js pre-installed. Connect to internet temporarily and run:
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
+curl -fsSL https://deb.nodesource.com/setup_26.x | sudo bash -
 sudo apt-get install -y nodejs
 ```
 
